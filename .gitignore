@@ -1,0 +1,9 @@
+# generated data (reproducible via `python data/generate.py`)
+data/raw/
+data/processed/
+# pipeline outputs (reproducible)
+outputs/
+reports/
+__pycache__/
+*.pyc
+.env
