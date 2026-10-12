@@ -617,7 +617,7 @@ def page_health(user: access.User) -> None:
         height=max(460, 24 * len(grid) + 140),
         title=dict(text=f"{metric} by branch and category", y=0.99, yanchor="top"),
         margin=dict(l=8, r=8, t=96, b=8),
-        xaxis=dict(side="top", title=None, tickangle=0),
+        xaxis=dict(side="top", title=None, automargin=True),
         yaxis=dict(autorange="reversed", title=None),
     )
     st.plotly_chart(fig, width="stretch", config=PLOT_CFG)

@@ -64,6 +64,8 @@ cheap, otherwise deferred with a reason.
 | U12 | A count shown as a metric "delta" rendered with an up-arrow, implying growth. | `src/dashboard.py` | low | **Fixed**: moved to help text. |
 | U13 | No dark theme. | `.streamlit/config.toml` | low | **Deferred**: one tested light palette guarantees the contrast above; a dark palette needs its own contrast pass. |
 | U14 | At 390 px, wide tables scroll horizontally. | tables | low | **Accepted**: key columns are pinned so rows stay identifiable; metrics and charts stack (see screenshots). |
+| U15 | At phone width the sidebar opened over the whole page, so content was invisible until dismissed. | `app.py:16` (`initial_sidebar_state="expanded"`) | high | **Fixed**: `"auto"` (open on desktop, collapsed behind its toggle on phones). |
+| U16 | At phone width the heatmap's category labels overlapped. | `src/dashboard.py` heatmap axis | medium | **Fixed**: labels auto-rotate with automatic margins. |
 
 Empty, loading and error states:
 - No outputs yet: a page explaining how to run the pipeline.
@@ -151,10 +153,11 @@ decision log), so the two scale independently.
 | R1 | Test coverage 39% (`generate.py` and `forecast.py` 0%); no integration test. | `tests/` | high | **Fixed**: {{TESTS}} tests at {{COVERAGE_PCT}} coverage, including an end-to-end run on a tiny multi-chunk, multi-bucket network, malformed-input rejection, monitoring, and a render of every dashboard page and its empty state. |
 | R2 | No data validation at pipeline boundaries. | all stages | high | **Fixed** (see S3). |
 | R3 | No CI. | n/a | high | **Fixed**: GitHub Actions running black, ruff, mypy, pytest with coverage gate ≥ 85%, bandit and pip-audit on every push. {{CI}} |
+| R8 | (Found by the new CI) the local `mypy` was a standalone tool with no pandas installed, so pandas types were `Any` and 71 type errors were invisible locally. | `Makefile`, `.pre-commit-config.yaml` | medium | **Fixed**: errors fixed (including unguarded `None` from DuckDB fetches and an empty SKU picker); `make typecheck` and the pre-commit hook now run `python -m mypy` with the project interpreter. |
 | R4 | `print` logging, no run ids. | all modules | medium | **Fixed**: `logging` with a run id on every line; `STOCKFLOW_LOG_FORMAT=json` for structured logs. |
 | R5 | Config, versions and seeds were not saved with outputs. | `run_pipeline.py` | medium | **Fixed**: `outputs/run_manifest.json` holds run id, git commit, full config and its hash, seed, package versions, per-stage timings and status, and SHA-256 of outputs. |
 | R6 | Lint and type debt: ruff 86 issues, mypy 34 errors (invalid type alias). | `src/models.py:13` | medium | **Fixed**: ruff, black, mypy, bandit all clean; pre-commit hooks. |
-| R7 | No container. | n/a | medium | **Fixed**: `Dockerfile` (slim, non-root, healthcheck). {{DOCKER}} |
+| R7 | No container. | n/a | medium | **Fixed**: `Dockerfile` (slim, non-root, healthcheck). Verified here: the image builds (1.39 GB), runs as user `stockflow`, imports every dependency, finds the HiGHS solver, and the dashboard health check returns 200. The `apt-get install libgomp1` layer could not be exercised because this sandbox's network policy blocks the Debian mirror (HTTP 403); the build used a sandbox-only copy that adds the proxy CA and skips that one layer. |
 
 ## 6. Production readiness
 

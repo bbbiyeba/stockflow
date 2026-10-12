@@ -6,7 +6,7 @@ first); the one thing it writes is the planners' approve / reject decision log.
 
 import streamlit as st
 
-st.set_page_config(page_title="Stockflow", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="Stockflow", layout="wide", initial_sidebar_state="auto")
 
 from src.dashboard import main  # noqa: E402
 
