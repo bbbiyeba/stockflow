@@ -158,7 +158,10 @@ def ingest(
         _register(con, paths.raw, "sales_daily", SALES_TYPES, "sales")
         _register(con, paths.raw, "inventory_txn", TXN_TYPES, "txn")
         stats = validate_large_extracts(con, "sales", "txn", masters["branches"], masters["skus"])
-        first, last = con.execute("SELECT min(date), max(date) FROM sales").fetchone()
+        span = con.execute("SELECT min(date), max(date) FROM sales").fetchone()
+        if span is None or span[0] is None:
+            raise DataValidationError("sales extract is empty")
+        first, last = span
         per_sku = con.execute(
             "SELECT sku_id, count(DISTINCT branch_id) AS n FROM sales " "GROUP BY sku_id ORDER BY sku_id"
         ).df()
@@ -299,7 +302,7 @@ def clean_sales(sales: pd.DataFrame, cfg: dict[str, Any] | None = None) -> tuple
     s = sales.loc[~dup, ["date", "branch_id", "sku_id", "qty"]]
     stats["duplicate_keys_summed"] = int(s.duplicated(["date", "branch_id", "sku_id"]).sum())
     if stats["duplicate_keys_summed"]:
-        s = s.groupby(["date", "branch_id", "sku_id"], as_index=False, observed=True)["qty"].sum()
+        s = s.groupby(["date", "branch_id", "sku_id"], as_index=False, observed=True).agg(qty=("qty", "sum"))
     s = s.reset_index(drop=True)
     stats["negative_qty_rows"] = int((s["qty"] < 0).sum())
     s["qty_returned"] = (-s["qty"]).clip(lower=0)
@@ -459,16 +462,20 @@ def promotions_daily(
     sku_pos = {s: i for i, s in enumerate(skus["sku_id"].astype(str))}
     discount = np.zeros((len(sku_pos), len(all_dates)), dtype=np.float32)
     days_into = np.full_like(discount, -1)
-    for r in promos.itertuples():
-        if r.sku_id not in sku_pos:
+    starts = pd.to_datetime(promos["start_date"]).to_numpy()
+    ends = pd.to_datetime(promos["end_date"]).to_numpy()
+    for sku, start, end, disc in zip(
+        promos["sku_id"].astype(str).to_list(), starts, ends, promos["discount_pct"].to_numpy(dtype=float), strict=True
+    ):
+        if sku not in sku_pos:
             continue
-        a = (r.start_date - all_dates[0]).days
-        b = (r.end_date - all_dates[0]).days
+        a = (pd.Timestamp(start) - all_dates[0]).days
+        b = (pd.Timestamp(end) - all_dates[0]).days
         if b < 0 or a >= len(all_dates):
             continue
         lo, hi = max(a, 0), min(b + 1, len(all_dates))
-        discount[sku_pos[r.sku_id], lo:hi] = r.discount_pct
-        days_into[sku_pos[r.sku_id], lo:hi] = np.arange(lo - a, hi - a)
+        discount[sku_pos[sku], lo:hi] = disc
+        days_into[sku_pos[sku], lo:hi] = np.arange(lo - a, hi - a)
     return discount, days_into
 
 

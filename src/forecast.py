@@ -185,9 +185,9 @@ def predict_lightgbm(
     for h in range(horizon):
         t = origin + h
         X = feature_frame(Yw, np.array([t]), b.static, net.cal, b.discount, b.days_into)[feature_names()]
-        Yw[:, t] = np.clip(model.predict(X), 0, None)
+        Yw[:, t] = np.clip(np.asarray(model.predict(X)), 0, None)
         if h in explain_steps:
-            c = model.predict(X, pred_contrib=True)  # SHAP values in raw (log-link) space
+            c = np.asarray(model.predict(X, pred_contrib=True))  # SHAP values in raw (log-link) space
             contrib = c if contrib is None else contrib + c
     if contrib is not None:
         contrib /= len(explain_steps)
@@ -284,7 +284,7 @@ def interval_params(resid: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
 
 def segment_quantiles(z: pd.DataFrame, quantiles: list[float]) -> dict[str, np.ndarray]:
     """Quantiles of standardised residuals per segment (``z`` has columns segment, z)."""
-    out = {seg: np.quantile(g["z"].to_numpy(), quantiles) for seg, g in z.groupby("segment")}
+    out = {str(seg): np.quantile(g["z"].to_numpy(), quantiles) for seg, g in z.groupby("segment")}
     out["__all__"] = np.quantile(z["z"].to_numpy(), quantiles) if len(z) else np.zeros(len(quantiles))
     return out
 
@@ -356,7 +356,7 @@ def run(config_path: str | None = None) -> None:
                 actual=actual,
                 pattern=pattern.astype("U12"),
                 scale=scale,
-                **preds,
+                **preds,  # type: ignore[arg-type]  # numpy's stub types **kwds too narrowly
             )
             for m, p in preds.items():
                 d = series_error_sums(actual, p)
@@ -474,7 +474,8 @@ def run(config_path: str | None = None) -> None:
         .rename(columns={"mean": "p10_p90_coverage", "size": "obs"})
         .reset_index()
     )
-    coverage.loc[len(coverage)] = ["ALL", cov_df["inside"].mean(), len(cov_df)]
+    total = pd.DataFrame({"segment": ["ALL"], "p10_p90_coverage": [cov_df["inside"].mean()], "obs": [len(cov_df)]})
+    coverage = pd.concat([coverage, total], ignore_index=True)
     coverage.to_csv(rep / "interval_coverage.csv", index=False)
     log.info("P10-P90 coverage on held-out fold: %.3f (target 0.80)", cov_df["inside"].mean())
 

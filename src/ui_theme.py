@@ -9,11 +9,11 @@ import plotly.io as pio
 
 # neutrals + one accent; red / amber / green are reserved for status only
 INK = "#1f2933"
-MUTED = "#616e7c"  # secondary text, 5.4:1 on white (WCAG AA)
-SUBTLE = "#9aa5b1"  # de-emphasised marks only, never text
+MUTED = "#616e7c"  # secondary text, 5.2:1 on white (WCAG AA)
+SUBTLE = "#838d99"  # de-emphasised marks only, never text; 3.4:1 on white (WCAG 1.4.11)
 GRID = "#e4e7eb"
 SURFACE = "#f5f7f9"
-ACCENT = "#0b6e69"  # 6.3:1 on white
+ACCENT = "#0b6e69"  # 6.1:1 on white
 ACCENT_LIGHT = "#a7d3cf"
 STATUS = {"risk": "#b42318", "warn": "#b54708", "ok": "#2f7d32"}
 

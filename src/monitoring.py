@@ -54,22 +54,22 @@ def accuracy_vs_baseline(
     mc = cfg.get("monitoring", {})
     j = forecasts.merge(actuals, on=["date", "branch_id", "sku_id"], how="inner")
     j = j.merge(stats[["branch_id", "sku_id", "abc_class"]], on=["branch_id", "sku_id"], how="left")
-    g = j.groupby("abc_class")
-    live = pd.DataFrame(
-        {
-            "days_scored": g["date"].nunique(),
-            "actual_units": g["qty"].sum(),
-            "wape": g.apply(
-                lambda x: (x["forecast"] - x["qty"]).abs().sum() / max(x["qty"].sum(), 1e-9), include_groups=False
-            ),
-            "bias": g.apply(
-                lambda x: (x["forecast"] - x["qty"]).sum() / max(x["qty"].sum(), 1e-9), include_groups=False
-            ),
-            "p10_p90_coverage": g.apply(
-                lambda x: ((x["qty"] >= x["p10"]) & (x["qty"] <= x["p90"])).mean(), include_groups=False
-            ),
-        }
-    ).reset_index()
+    j = j.assign(err=j["forecast"] - j["qty"], inside=(j["qty"] >= j["p10"]) & (j["qty"] <= j["p90"]))
+    j["abs_err"] = j["err"].abs()
+    live = (
+        j.groupby("abc_class")
+        .agg(
+            days_scored=("date", "nunique"),
+            actual_units=("qty", "sum"),
+            abs_err=("abs_err", "sum"),
+            err=("err", "sum"),
+            p10_p90_coverage=("inside", "mean"),
+        )
+        .reset_index()
+    )
+    denom = live["actual_units"].clip(lower=1e-9)
+    live["wape"] = live.pop("abs_err") / denom
+    live["bias"] = live.pop("err") / denom
     base = baseline.set_index("abc_class")
     live["baseline_wape"] = live["abc_class"].map(base["wape"])
     live["wape_ratio"] = live["wape"] / live["baseline_wape"]

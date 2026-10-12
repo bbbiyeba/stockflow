@@ -18,7 +18,9 @@ Modes (environment variables, see ``.env.example``)
 from __future__ import annotations
 
 import os
+from collections.abc import Mapping
 from dataclasses import dataclass
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -50,7 +52,7 @@ def approvers() -> set[str]:
     return {e.strip().lower() for e in os.environ.get("STOCKFLOW_APPROVERS", "").split(",") if e.strip()}
 
 
-def resolve(user_info: dict[str, object] | None) -> User:
+def resolve(user_info: Mapping[str, Any] | None) -> User:
     """Map the identity-provider claims (or their absence) to a ``User``.
 
     Args:

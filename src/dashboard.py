@@ -8,6 +8,7 @@ outputs from different configurations.
 from __future__ import annotations
 
 import contextlib
+import functools
 import html
 import json
 import math
@@ -485,9 +486,9 @@ def page_transfers(user: access.User) -> None:
                     run_id,
                     [
                         {
-                            "transfer_id": r.transfer_id,
+                            "transfer_id": str(r.transfer_id),
                             "decision": "approved" if r.Decide == "Approve" else "rejected",
-                            "note": r.Note,
+                            "note": str(r.Note or ""),
                         }
                         for r in picked.itertuples()
                     ],
@@ -695,9 +696,12 @@ def page_forecast(user: access.User) -> None:
         st.markdown("### Series")
         b = st.selectbox("Branch", sorted(pol["branch_id"].unique()), index=0)
         skus = pol.loc[pol["branch_id"] == b].sort_values("forecast_28d", ascending=False)
-        labels = {r.sku_id: f"{r.sku_id} · {r.category} · class {r.abc_class}" for r in skus.itertuples()}
-        s = st.selectbox("SKU (sorted by forecast volume)", list(labels), format_func=labels.get)
+        labels = {str(r.sku_id): f"{r.sku_id} · {r.category} · class {r.abc_class}" for r in skus.itertuples()}
+        s = st.selectbox("SKU (sorted by forecast volume)", list(labels), format_func=lambda x: labels.get(x, x))
         days = st.slider("History shown (days)", 28, 365, 120, step=7)
+    if b is None or s is None:
+        st.info("This branch stocks no SKUs in the current run.")
+        return
     row = pol[(pol["branch_id"] == b) & (pol["sku_id"] == s)]
     try:
         f = load_forecast(b, s).sort_values("date")
@@ -1024,7 +1028,7 @@ def main() -> None:
             manifest = load_outputs()["manifest"]
         nav = st.navigation(
             [
-                st.Page(lambda f=fn: f(user), title=title, url_path=key, default=key == "transfers")
+                st.Page(functools.partial(fn, user), title=title, url_path=key, default=key == "transfers")
                 for key, (title, fn) in PAGES.items()
             ]
         )

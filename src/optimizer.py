@@ -33,6 +33,7 @@ import argparse
 import hashlib
 import sys
 import time
+from collections.abc import Hashable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -178,7 +179,10 @@ def objective_terms(nodes: pd.DataFrame, plan: pd.DataFrame) -> dict[str, float]
 
 
 def solve_milp(
-    prob: Problem, cfg: dict[str, Any], pairs: pd.DataFrame | None = None, capacity: dict[str, float] | None = None
+    prob: Problem,
+    cfg: dict[str, Any],
+    pairs: pd.DataFrame | None = None,
+    capacity: Mapping[Hashable, float] | None = None,
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
     """Solve the MILP for ``pairs`` (default: all arcs) with HiGHS; returns the plan and solver info."""
     oc = cfg["optimizer"]
@@ -200,19 +204,23 @@ def solve_milp(
     senders = P["node_s"].unique()
     receivers = P["node_r"].unique()
     ex = {i: m.add_variable(f"ex_{i}", lowBound=0) for i in senders}
-    c1 = {j: m.add_variable(f"c1_{j}", lowBound=0, upBound=float(d.at[j, "tier1"])) for j in receivers}
-    c2 = {j: m.add_variable(f"c2_{j}", lowBound=0, upBound=float(d.at[j, "tier2"])) for j in receivers}
+    col = {
+        c: d[c].astype(float).to_dict()
+        for c in ("tier1", "tier2", "e_cost", "p1", "p2", "sendable", "excess_units", "room")
+    }
+    c1 = {j: m.add_variable(f"c1_{j}", lowBound=0, upBound=float(col["tier1"][j])) for j in receivers}
+    c2 = {j: m.add_variable(f"c2_{j}", lowBound=0, upBound=float(col["tier2"][j])) for j in receivers}
 
     m += (
         pulp.lpSum(float(c) * x[k] for k, c in zip(ids, ucost, strict=True))
-        + pulp.lpSum(float(d.at[i, "e_cost"]) * ex[i] for i in senders)
-        - pulp.lpSum(float(d.at[j, "p1"]) * c1[j] + float(d.at[j, "p2"]) * c2[j] for j in receivers)
+        + pulp.lpSum(float(col["e_cost"][i]) * ex[i] for i in senders)
+        - pulp.lpSum(float(col["p1"][j]) * c1[j] + float(col["p2"][j]) * c2[j] for j in receivers)
     )
     for i, ks in P.groupby("node_s").groups.items():
-        m += pulp.lpSum(x[k] for k in ks) <= float(d.at[i, "sendable"])
-        m += ex[i] >= float(d.at[i, "excess_units"]) - pulp.lpSum(x[k] for k in ks)
+        m += pulp.lpSum(x[k] for k in ks) <= float(col["sendable"][i])
+        m += ex[i] >= float(col["excess_units"][i]) - pulp.lpSum(x[k] for k in ks)
     for j, ks in P.groupby("node_r").groups.items():
-        m += pulp.lpSum(x[k] for k in ks) <= float(d.at[j, "room"])
+        m += pulp.lpSum(x[k] for k in ks) <= float(col["room"][j])
         m += c1[j] + c2[j] <= pulp.lpSum(x[k] for k in ks)
     for b, ks in P.groupby("branch_id_r").groups.items():
         m += pulp.lpSum(x[k] for k in ks) <= float(cap.get(b, 0))
@@ -237,7 +245,7 @@ def solve_milp(
 
 
 def solve_greedy(
-    prob: Problem, pairs: pd.DataFrame | None = None, capacity: dict[str, float] | None = None
+    prob: Problem, pairs: pd.DataFrame | None = None, capacity: Mapping[Hashable, float] | None = None
 ) -> pd.DataFrame:
     """Baseline: serve the most urgent receivers first from the cheapest eligible sender.
 

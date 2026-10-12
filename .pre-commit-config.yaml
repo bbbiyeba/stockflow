@@ -21,7 +21,7 @@ repos:
     hooks:
       - id: mypy
         name: mypy
-        entry: mypy src
+        entry: python -m mypy src   # project interpreter, so pandas-stubs are used
         language: system
         pass_filenames: false
         types: [python]

@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+import numpy.typing as npt
 import pandas as pd
 from scipy.stats import norm
 
@@ -42,7 +43,7 @@ def normal_loss(k: np.ndarray) -> np.ndarray:
     return norm.pdf(k) - k * norm.sf(k)
 
 
-def expected_lost_units(position: np.ndarray, mean: np.ndarray, sigma: np.ndarray) -> np.ndarray:
+def expected_lost_units(position: npt.ArrayLike, mean: npt.ArrayLike, sigma: npt.ArrayLike) -> np.ndarray:
     """Expected units short over the lead time, E[(D - position)^+], D ~ N(mean, sigma)."""
     position, mean, sigma = (np.asarray(a, dtype=float) for a in (position, mean, sigma))
     with np.errstate(divide="ignore", invalid="ignore"):
@@ -51,8 +52,9 @@ def expected_lost_units(position: np.ndarray, mean: np.ndarray, sigma: np.ndarra
     return np.where(sigma > 0, loss, np.maximum(mean - position, 0.0))
 
 
-def stockout_probability(position: np.ndarray, mean: np.ndarray, sigma: np.ndarray) -> np.ndarray:
+def stockout_probability(position: npt.ArrayLike, mean: npt.ArrayLike, sigma: npt.ArrayLike) -> np.ndarray:
     """P(D > position), D ~ N(mean, sigma); degenerate case when sigma == 0."""
+    position, mean, sigma = (np.asarray(a, dtype=float) for a in (position, mean, sigma))
     with np.errstate(divide="ignore", invalid="ignore"):
         p = norm.sf((position - mean) / sigma)
     return np.where(sigma > 0, p, (mean > position).astype(float))

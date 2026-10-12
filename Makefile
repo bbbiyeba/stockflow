@@ -32,7 +32,7 @@ lint:
 format:
 	black . && ruff check . --fix
 typecheck:
-	mypy src
+	$(PY) -m mypy src
 security:
 	bandit -q -c pyproject.toml -r src data app.py run_pipeline.py scripts && pip-audit -r requirements.txt
 check: lint typecheck test security   ## everything CI runs

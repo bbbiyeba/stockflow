@@ -200,6 +200,8 @@ def validate_large_extracts(
                count(*) FILTER (WHERE abs(qty) > 1e7) AS absurd_qty,
                min(date) AS first_date, max(date) AS last_date
         FROM {sales_view}""").fetchone()  # nosec B608 - internal view name, no user input
+    if q is None:
+        raise DataValidationError("sales extract could not be read")
     sales = dict(
         zip(
             ["rows", "null_keys", "unknown_branch", "unknown_sku", "absurd_qty", "first_date", "last_date"],
@@ -213,6 +215,8 @@ def validate_large_extracts(
                count(*) FILTER (WHERE date IS NULL OR branch_id IS NULL OR sku_id IS NULL OR qty IS NULL) AS null_keys,
                count(*) FILTER (WHERE txn_type = 'snapshot' AND qty < 0) AS negative_snapshot
         FROM {txn_view}""").fetchone()  # nosec B608
+    if t is None:
+        raise DataValidationError("inventory transactions could not be read")
     txn = dict(zip(["rows", "bad_type", "null_keys", "negative_snapshot"], t, strict=True))
     problems = []
     if sales["rows"] == 0:
