@@ -9,11 +9,11 @@ import plotly.io as pio
 
 # neutrals + one accent; red / amber / green are reserved for status only
 INK = "#1f2933"
-MUTED = "#616e7c"      # secondary text, 5.4:1 on white (WCAG AA)
-SUBTLE = "#9aa5b1"     # de-emphasised marks only, never text
+MUTED = "#616e7c"  # secondary text, 5.4:1 on white (WCAG AA)
+SUBTLE = "#9aa5b1"  # de-emphasised marks only, never text
 GRID = "#e4e7eb"
 SURFACE = "#f5f7f9"
-ACCENT = "#0b6e69"     # 6.3:1 on white
+ACCENT = "#0b6e69"  # 6.3:1 on white
 ACCENT_LIGHT = "#a7d3cf"
 STATUS = {"risk": "#b42318", "warn": "#b54708", "ok": "#2f7d32"}
 
@@ -27,13 +27,20 @@ def register_plotly_template() -> None:
     t.layout = go.Layout(
         font=dict(family="Source Sans Pro, Source Sans 3, system-ui, sans-serif", size=13, color=INK),
         title=dict(font=dict(size=15, color=INK), x=0, xanchor="left"),
-        paper_bgcolor="white", plot_bgcolor="white",
+        paper_bgcolor="white",
+        plot_bgcolor="white",
         colorway=[ACCENT, MUTED, SUBTLE, INK],
-        xaxis=dict(showgrid=False, linecolor=GRID, ticks="outside", tickcolor=GRID, zeroline=False,
-                   title=dict(font=dict(size=12, color=MUTED))),
-        yaxis=dict(gridcolor=GRID, zeroline=False, linecolor=GRID,
-                   title=dict(font=dict(size=12, color=MUTED))),
-        margin=dict(l=8, r=8, t=48, b=8), hoverlabel=dict(bgcolor="white", font_size=12),
+        xaxis=dict(
+            showgrid=False,
+            linecolor=GRID,
+            ticks="outside",
+            tickcolor=GRID,
+            zeroline=False,
+            title=dict(font=dict(size=12, color=MUTED)),
+        ),
+        yaxis=dict(gridcolor=GRID, zeroline=False, linecolor=GRID, title=dict(font=dict(size=12, color=MUTED))),
+        margin=dict(l=8, r=8, t=48, b=8),
+        hoverlabel=dict(bgcolor="white", font_size=12),
         showlegend=False,
     )
     pio.templates["stockflow"] = t

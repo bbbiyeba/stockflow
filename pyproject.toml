@@ -1,0 +1,57 @@
+[project]
+name = "stockflow"
+version = "1.0.0"
+description = "Branch-level SKU demand forecasting and inventory rebalancing for a multi-branch distributor"
+requires-python = ">=3.11"
+
+[tool.black]
+line-length = 120
+target-version = ["py311"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+extend-exclude = ["notebooks"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "S", "C4", "PIE", "RET"]
+# N8xx naming rules are deliberately off: matrices follow maths notation (Y, T, H, K).
+ignore = [
+    "E731",   # small lambdas used as local helpers
+    "S101",   # assert is fine in tests (scoped below for src)
+    "S311",   # numpy RNG is for simulation, not cryptography
+    "SIM108", # ternaries are not always clearer
+    "RET504", # named return values aid debugging
+    "C408",   # dict(...) reads better for Plotly layout kwargs
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101", "S603", "S607"]
+"scripts/*" = ["S603"]
+# SQL here interpolates only regex-validated view names and module constants, never user values
+"src/validation.py" = ["S608"]
+# fixed argv resolved with shutil.which; no user input reaches the subprocess
+"src/runlog.py" = ["S603"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["src", "data"]
+
+[tool.mypy]
+python_version = "3.13"
+ignore_missing_imports = true
+check_untyped_defs = true
+warn_unused_ignores = false
+no_implicit_optional = true
+exclude = ["notebooks/", "tests/"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+filterwarnings = ["ignore::DeprecationWarning"]
+
+[tool.coverage.run]
+source = ["src", "data", "run_pipeline"]
+omit = ["notebooks/*"]
+
+[tool.bandit]
+exclude_dirs = ["tests", "notebooks"]

@@ -10,11 +10,13 @@ from src.optimizer import apply_plan, build_problem, describe_plan, objective_te
 
 def _network(seed: int = 0, n_branch: int = 6, n_sku: int = 8):
     rng = np.random.default_rng(seed)
-    branches = pd.DataFrame({
-        "branch_id": [f"B{i}" for i in range(n_branch)],
-        "region": ["East", "East", "East", "West", "West", "West"][:n_branch],
-        "storage_capacity_units": rng.integers(2_000, 4_000, n_branch),
-    })
+    branches = pd.DataFrame(
+        {
+            "branch_id": [f"B{i}" for i in range(n_branch)],
+            "region": ["East", "East", "East", "West", "West", "West"][:n_branch],
+            "storage_capacity_units": rng.integers(2_000, 4_000, n_branch),
+        }
+    )
     rows = []
     for s in range(n_sku):
         cost = float(rng.uniform(5, 80))
@@ -28,20 +30,39 @@ def _network(seed: int = 0, n_branch: int = 6, n_sku: int = 8):
             stagnant = bool(rng.random() < 0.1)
             if stagnant:
                 mu = 0.0
-            rows.append(dict(branch_id=b, sku_id=f"S{s}", category="Tools", unit_cost=cost,
-                             holding_cost_rate=0.25, obsolescence_risk=0.05, is_stagnant=stagnant,
-                             forecast_mean_daily=mu, fc_lead=fc_lead if mu else 0.0,
-                             safety_stock=ss if mu else 0.0, reorder_point=rop if mu else 0.0,
-                             target_max=tmax if mu else 0.0, sigma_lead=np.sqrt(mu * 7) + 0.1,
-                             on_hand=on_hand, inv_position=on_hand,
-                             days_of_supply=on_hand / mu if mu else 999.0))
+            rows.append(
+                dict(
+                    branch_id=b,
+                    sku_id=f"S{s}",
+                    category="Tools",
+                    unit_cost=cost,
+                    holding_cost_rate=0.25,
+                    obsolescence_risk=0.05,
+                    is_stagnant=stagnant,
+                    forecast_mean_daily=mu,
+                    fc_lead=fc_lead if mu else 0.0,
+                    safety_stock=ss if mu else 0.0,
+                    reorder_point=rop if mu else 0.0,
+                    target_max=tmax if mu else 0.0,
+                    sigma_lead=np.sqrt(mu * 7) + 0.1,
+                    on_hand=on_hand,
+                    inv_position=on_hand,
+                    days_of_supply=on_hand / mu if mu else 999.0,
+                )
+            )
     pol = pd.DataFrame(rows)
     pol["excess_units"] = np.maximum(pol["inv_position"] - pol["target_max"], 0)
     pol["p_stockout"] = 0.5
     ids = branches["branch_id"]
-    costs = pd.DataFrame([(a, b, 1.0 + abs(int(a[1]) - int(b[1])) * 0.4, 1 + abs(int(a[1]) - int(b[1])) // 2)
-                          for a in ids for b in ids if a != b],
-                         columns=["from_branch", "to_branch", "cost_per_unit", "transit_days"])
+    costs = pd.DataFrame(
+        [
+            (a, b, 1.0 + abs(int(a[1]) - int(b[1])) * 0.4, 1 + abs(int(a[1]) - int(b[1])) // 2)
+            for a in ids
+            for b in ids
+            if a != b
+        ],
+        columns=["from_branch", "to_branch", "cost_per_unit", "transit_days"],
+    )
     return pol, branches, costs
 
 
@@ -94,7 +115,7 @@ def test_minimum_quantity_and_transit_limit(solved):
 
 def test_no_circular_transfers(solved):
     _, _, plan, _ = solved
-    arcs = set(zip(plan["sku_id"], plan["branch_id_s"], plan["branch_id_r"]))
+    arcs = set(zip(plan["sku_id"], plan["branch_id_s"], plan["branch_id_r"], strict=True))
     assert not any((s, b, a) in arcs for s, a, b in arcs)
     # a branch never both sends and receives the same SKU
     assert not set(plan["node_s"]) & set(plan["node_r"])

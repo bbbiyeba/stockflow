@@ -8,9 +8,11 @@ forecast day, used to align weekday profiles.
 
 from __future__ import annotations
 
+from typing import TypeAlias
+
 import numpy as np
 
-ArrayF = np.ndarray
+ArrayF: TypeAlias = np.ndarray
 
 
 def _fill(Y: ArrayF) -> ArrayF:
@@ -41,7 +43,7 @@ def weekday_profile(Y: ArrayF, last_dow: int, weeks: int = 26, prior_strength: f
     Returns:
         (n_series, 7) multipliers indexed by weekday (Mon=0).
     """
-    h = _fill(Y[:, -7 * weeks:])
+    h = _fill(Y[:, -7 * weeks :])
     T = h.shape[1]
     dows = (last_dow - (T - 1 - np.arange(T))) % 7
     tot = np.stack([h[:, dows == d].sum(axis=1) for d in range(7)], axis=1)
@@ -70,7 +72,7 @@ def croston_sba(Y: ArrayF, alpha: float = 0.1, fit_days: int = 365) -> ArrayF:
     n = h.shape[0]
     z = np.full(n, np.nan)  # demand size level
     p = np.full(n, np.nan)  # interval level
-    q = np.ones(n)          # periods since last demand
+    q = np.ones(n)  # periods since last demand
     for t in range(h.shape[1]):
         d = h[:, t]
         hit = d > 0
@@ -101,8 +103,9 @@ def tsb(Y: ArrayF, alpha_d: float = 0.1, alpha_p: float = 0.05, fit_days: int = 
     return p * z
 
 
-def ses_rate(Y: ArrayF, profile: ArrayF, last_dow: int, alphas: tuple[float, ...] = (0.03, 0.08, 0.15, 0.3),
-             fit_days: int = 365) -> ArrayF:
+def ses_rate(
+    Y: ArrayF, profile: ArrayF, last_dow: int, alphas: tuple[float, ...] = (0.03, 0.08, 0.15, 0.3), fit_days: int = 365
+) -> ArrayF:
     """Simple exponential smoothing (ETS(A,N,N)) on weekday-adjusted demand.
 
     The smoothing constant is chosen per series from ``alphas`` by in-sample one-step SSE.
@@ -119,7 +122,7 @@ def ses_rate(Y: ArrayF, profile: ArrayF, last_dow: int, alphas: tuple[float, ...
         for t in range(T):
             e = x[:, t] - lvl
             if t >= 28:
-                sse += e ** 2
+                sse += e**2
             lvl = lvl + a * e
         better = sse < best_sse
         best_sse = np.where(better, sse, best_sse)

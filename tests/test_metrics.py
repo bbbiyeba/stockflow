@@ -1,9 +1,7 @@
 import numpy as np
-import pandas as pd
 import pytest
 
-from src.metrics import (aggregate_metrics, bias, demand_pattern, mae, mase, mase_scale, series_error_sums,
-                         wape)
+from src.metrics import aggregate_metrics, bias, demand_pattern, mae, mase, mase_scale, series_error_sums, wape
 
 
 def test_point_metrics_simple_values():

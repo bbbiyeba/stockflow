@@ -1,8 +1,14 @@
 import numpy as np
 import pytest
 
-from src.models import (croston_sba, forecast_moving_average, forecast_seasonal_naive, forecast_statistical, tsb,
-                        weekday_profile)
+from src.models import (
+    croston_sba,
+    forecast_moving_average,
+    forecast_seasonal_naive,
+    forecast_statistical,
+    tsb,
+    weekday_profile,
+)
 
 
 def test_seasonal_naive_repeats_last_week():

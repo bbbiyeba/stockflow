@@ -7,3 +7,15 @@ reports/
 __pycache__/
 *.pyc
 .env
+data_10x/
+outputs_10x/
+reports_10x/
+*.tmp
+decisions/
+.env
+.streamlit/secrets.toml
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/

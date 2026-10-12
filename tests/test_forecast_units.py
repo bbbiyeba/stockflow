@@ -1,0 +1,45 @@
+import numpy as np
+import pandas as pd
+
+from src.forecast import _sample_plan, apply_intervals, cold_start_forecast, interval_params, segment_quantiles
+
+
+def test_cold_start_borrows_from_peers():
+    static = pd.DataFrame(
+        {
+            "branch_id": ["B1", "B2", "B3", "B1", "B3"],
+            "sku_id": ["S1", "S1", "S1", "S2", "S2"],
+            "category": ["Tools"] * 5,
+        }
+    )
+    recent = np.array([2.0, 4.0, 0.0, 1.0, 2.0])
+    hist = np.array([400, 400, 10, 400, 400])  # B3/S1 is new
+    weekday = np.ones(7)
+    cold, fc = cold_start_forecast(static, recent, hist, 56, weekday, 0, 7)
+    assert cold.tolist() == [False, False, True, False, False]
+    # S1 rate (mean of B1, B2) = 3; on S2, B3 sells 2 vs the SKU mean 1.5 -> branch factor 4/3 -> 4/day
+    np.testing.assert_allclose(fc[2], 4.0)
+    assert (fc[~cold] == 0).all()
+
+
+def test_cold_start_new_sku_uses_category_median():
+    static = pd.DataFrame({"branch_id": ["B1", "B1"], "sku_id": ["S1", "S9"], "category": ["Tools", "Tools"]})
+    cold, fc = cold_start_forecast(static, np.array([3.0, 0.0]), np.array([400, 3]), 56, np.ones(7), 0, 3)
+    np.testing.assert_allclose(fc[1], 3.0)
+
+
+def test_intervals_monotone_non_negative_and_scaled():
+    rng = np.random.default_rng(0)
+    resid = rng.normal(0, 2, (50, 4, 28))
+    sd, sw = interval_params(resid)
+    assert abs(sd.mean() - 2) < 0.1 and np.all(sw > sd)
+    z = pd.DataFrame({"segment": "A|smooth", "z": (resid / sd[:, None, None]).ravel()})
+    qs = segment_quantiles(z, [0.1, 0.5, 0.9])
+    q = apply_intervals(np.full((50, 28), 1.0), sd, np.array(["A|smooth"] * 50), qs)
+    assert (q >= 0).all() and (np.diff(q, axis=2) >= 0).all()
+
+
+def test_sample_plan_caps_rows():
+    assert _sample_plan(1000, 540, 4000, 10_000_000) == (1.0, 540)
+    share, days = _sample_plan(30_000, 540, 490_000, 4_000_000)
+    assert 490_000 * share * days <= 4_000_000 * 1.01 and days >= 56

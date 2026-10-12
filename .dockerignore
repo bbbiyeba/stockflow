@@ -1,0 +1,13 @@
+.git
+.env
+.streamlit/secrets.toml
+data/raw
+data/processed
+data_10x
+outputs_10x
+reports_10x
+decisions
+**/__pycache__
+.mypy_cache
+.ruff_cache
+.pytest_cache

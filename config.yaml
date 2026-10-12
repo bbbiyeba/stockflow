@@ -6,6 +6,7 @@ paths:
   processed_dir: data/processed  # cleaned parquet files
   output_dir: outputs            # forecasts, policies, transfer recommendations
   reports_dir: reports           # metrics tables and figures
+  decisions_dir: decisions       # planner approve/reject log (written by the dashboard only)
 
 # ---------------------------------------------------------------------------
 # 0. Synthetic data generation
@@ -17,6 +18,9 @@ data:
   start_date: "2023-10-01"
   end_date: "2026-09-30"        # 3 years of daily history; "today" is the day after
   assortment_coverage: [0.35, 0.95]  # share of branches carrying a SKU (slow movers -> low end)
+  chunk_series: 60000            # series simulated per chunk (bounds memory; whole SKUs per chunk)
+  raw_format: csv                # csv | parquet (use parquet for large networks)
+  write_truth: true              # ground truth for validating cleaning (skipped above 20k series)
   quality_issues:
     outage_branch_day_rate: 0.004   # whole branch-days missing from the sales extract
     random_row_drop_rate: 0.002     # individual rows missing
@@ -30,6 +34,8 @@ data:
 # 1. Forecasting
 # ---------------------------------------------------------------------------
 prep:
+  bucket_series: 30000           # series cleaned / forecast per bucket (bounds memory)
+  duckdb_memory_limit: 4GB       # DuckDB spills to disk above this during ingest
   outlier_q99_multiple: 3.0      # value > this x the series' 99th pct of positive sales => keying error
   outlier_min_qty: 10            # never flag values below this as outliers
   max_plausible_adjustment: 10   # negative adjustments above this AND above prior stock = keying error
@@ -41,7 +47,8 @@ forecast:
   backtest_folds: 4              # rolling origins, each `horizon` days apart
   seasonal_period: 7
   moving_average_window: 28
-  lgbm_train_days: 540           # training window (rows) per fold, after lag burn-in
+  lgbm_train_days: 540           # training window (days) per fold
+  lgbm_max_train_rows: 4000000   # cap on training rows; larger networks are sampled (series x days)
   lgbm_params:
     objective: tweedie
     tweedie_variance_power: 1.2
@@ -56,11 +63,18 @@ forecast:
   lgbm_num_boost_round: 350
   selection_metric: wape         # metric used to pick the best model per segment
   quantiles: [0.1, 0.5, 0.9]
+  bias_flag_threshold: 0.05      # |bias| above this is flagged in reports/bias_check.csv
+  cold_start_days: 56            # series with less history get the peer-based cold-start forecast
+  explain_steps: [0, 7, 14, 21]  # horizon days averaged for SHAP explanations
+  warm_start: false              # continue training the previous model (hash-verified) instead of refitting
+  warm_start_rounds: 100
+  write_csv: true                # also write outputs/forecasts.csv (Parquet is always written)
 
 policy:
   service_level: 0.95            # cycle service level used for safety stock
   review_period_days: 14         # R in the order-up-to level (ROP + R days of demand)
   stockout_risk_threshold: 0.20  # flag if P(lead-time demand > on hand) exceeds this
+  liquidation_days_of_supply: 365  # stagnant + network stock lasting longer than this => liquidate
 
 # ---------------------------------------------------------------------------
 # 2. Rebalancing optimizer
@@ -77,5 +91,17 @@ optimizer:
   stockout_cost_multiplier: 0.6  # lost margin + expediting, as a multiple of unit cost
   safety_stock_tier_weight: 0.35 # shortfall in the safety-stock tier is worth this share of a lost unit
   obsolescence_multiplier_stagnant: 3.0  # stagnant excess carries this multiple of the SKU's obsolescence risk
-  solver_time_limit_s: 180
+  max_senders_per_receiver: 8    # arc pruning: keep each receiver's k cheapest senders ...
+  max_receivers_per_sender: 8    # ... and each sender's k cheapest receivers
+  batch_arcs: 20000              # SKUs are solved in batches of about this many arcs
+  solver_time_limit_s: 60        # per batch; best feasible solution is kept, greedy if none
   solver_gap: 0.005
+
+# ---------------------------------------------------------------------------
+# 3. Monitoring (python -m src.monitoring --actuals new_sales.csv)
+# ---------------------------------------------------------------------------
+monitoring:
+  wape_degradation: 0.20         # alert if live WAPE > baseline x (1 + this)
+  bias_limit: 0.10               # alert if |live bias| exceeds this
+  coverage_tolerance: 0.10       # alert if P10-P90 coverage is outside 0.80 +/- this
+  psi_limit: 0.25                # alert if demand PSI vs training exceeds this

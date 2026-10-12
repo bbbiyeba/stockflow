@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -20,21 +21,22 @@ class Paths:
     processed: Path
     output: Path
     reports: Path
+    decisions: Path
 
     @property
     def figures(self) -> Path:
         return self.reports / "figures"
 
-    def ensure(self) -> "Paths":
+    def ensure(self) -> Paths:
         """Create all directories if they do not exist and return self."""
-        for p in (self.raw, self.processed, self.output, self.reports, self.figures):
+        for p in (self.raw, self.processed, self.output, self.reports, self.figures, self.decisions):
             p.mkdir(parents=True, exist_ok=True)
         return self
 
 
 def load_config(path: str | Path | None = None) -> dict[str, Any]:
-    """Load the YAML config (defaults to ``config.yaml`` at the project root)."""
-    cfg_path = Path(path) if path else DEFAULT_CONFIG
+    """Load the YAML config: ``path``, else ``$STOCKFLOW_CONFIG``, else ``config.yaml`` at the project root."""
+    cfg_path = Path(path) if path else Path(os.environ.get("STOCKFLOW_CONFIG") or DEFAULT_CONFIG)
     with open(cfg_path, encoding="utf-8") as fh:
         return yaml.safe_load(fh)
 
@@ -47,4 +49,5 @@ def get_paths(cfg: dict[str, Any]) -> Paths:
         processed=PROJECT_ROOT / p["processed_dir"],
         output=PROJECT_ROOT / p["output_dir"],
         reports=PROJECT_ROOT / p["reports_dir"],
+        decisions=PROJECT_ROOT / p.get("decisions_dir", "decisions"),
     ).ensure()

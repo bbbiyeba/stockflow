@@ -69,14 +69,16 @@ def series_error_sums(actual: np.ndarray, forecast: np.ndarray) -> pd.DataFrame:
     f = np.asarray(forecast, dtype=float)
     ok = ~np.isnan(a) & ~np.isnan(f)
     e = np.where(ok, f - a, 0.0)
-    return pd.DataFrame({
-        "n_obs": ok.sum(axis=1),
-        "actual_sum": np.where(ok, a, 0.0).sum(axis=1),
-        "forecast_sum": np.where(ok, f, 0.0).sum(axis=1),
-        "abs_err": np.abs(e).sum(axis=1),
-        "err": e.sum(axis=1),
-        "sq_err": (e ** 2).sum(axis=1),
-    })
+    return pd.DataFrame(
+        {
+            "n_obs": ok.sum(axis=1),
+            "actual_sum": np.where(ok, a, 0.0).sum(axis=1),
+            "forecast_sum": np.where(ok, f, 0.0).sum(axis=1),
+            "abs_err": np.abs(e).sum(axis=1),
+            "err": e.sum(axis=1),
+            "sq_err": (e**2).sum(axis=1),
+        }
+    )
 
 
 def aggregate_metrics(df: pd.DataFrame, by: list[str]) -> pd.DataFrame:
@@ -89,15 +91,17 @@ def aggregate_metrics(df: pd.DataFrame, by: list[str]) -> pd.DataFrame:
     d["scaled"] = d["series_mae"] / d["scale"].where(d["scale"] > 0)
     d["total_abs_err"] = (d["forecast_sum"] - d["actual_sum"]).abs()
     g = d.groupby(by, observed=True)
-    out = pd.DataFrame({
-        "series": g.size(),
-        "actual_units": g["actual_sum"].sum(),
-        "wape": g["abs_err"].sum() / g["actual_sum"].sum(),
-        "mae": g["abs_err"].sum() / g["n_obs"].sum(),
-        "bias": g["err"].sum() / g["actual_sum"].sum(),
-        "mase": g["scaled"].mean(),
-        "wape_28d_total": g["total_abs_err"].sum() / g["actual_sum"].sum(),
-    })
+    out = pd.DataFrame(
+        {
+            "series": g.size(),
+            "actual_units": g["actual_sum"].sum(),
+            "wape": g["abs_err"].sum() / g["actual_sum"].sum(),
+            "mae": g["abs_err"].sum() / g["n_obs"].sum(),
+            "bias": g["err"].sum() / g["actual_sum"].sum(),
+            "mase": g["scaled"].mean(),
+            "wape_28d_total": g["total_abs_err"].sum() / g["actual_sum"].sum(),
+        }
+    )
     return out.reset_index()
 
 
@@ -114,12 +118,14 @@ def demand_pattern(history: np.ndarray, adi_cut: float = 1.32, cv2_cut: float = 
     sizes = np.where(nz, h, np.nan)
     with np.errstate(invalid="ignore", divide="ignore"):
         import warnings
+
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", RuntimeWarning)
             mean = np.nanmean(sizes, axis=1)
             std = np.nanstd(sizes, axis=1)
     cv2 = np.where(n_nz > 1, (std / mean) ** 2, 0.0)
-    out = np.where(adi < adi_cut, np.where(cv2 < cv2_cut, "smooth", "erratic"),
-                   np.where(cv2 < cv2_cut, "intermittent", "lumpy"))
+    out = np.where(
+        adi < adi_cut, np.where(cv2 < cv2_cut, "smooth", "erratic"), np.where(cv2 < cv2_cut, "intermittent", "lumpy")
+    )
     out = np.where(n_nz == 0, "no_demand", out)
     return out.astype(object)

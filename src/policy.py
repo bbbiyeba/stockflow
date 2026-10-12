@@ -29,6 +29,10 @@ from scipy.stats import norm
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from src.config import get_paths, load_config  # noqa: E402
+from src.runlog import get_logger  # noqa: E402
+from src.validation import POLICY, validate  # noqa: E402
+
+log = get_logger("policy")
 
 DOS_CAP = 999.0
 
@@ -40,7 +44,7 @@ def normal_loss(k: np.ndarray) -> np.ndarray:
 
 def expected_lost_units(position: np.ndarray, mean: np.ndarray, sigma: np.ndarray) -> np.ndarray:
     """Expected units short over the lead time, E[(D - position)^+], D ~ N(mean, sigma)."""
-    position, mean, sigma = map(lambda a: np.asarray(a, dtype=float), (position, mean, sigma))
+    position, mean, sigma = (np.asarray(a, dtype=float) for a in (position, mean, sigma))
     with np.errstate(divide="ignore", invalid="ignore"):
         k = (position - mean) / sigma
         loss = sigma * normal_loss(k)
@@ -63,8 +67,15 @@ def horizon_sum(daily: np.ndarray, days: np.ndarray) -> np.ndarray:
     return within + extra
 
 
-def compute_policy(stats: pd.DataFrame, daily: np.ndarray, status: pd.DataFrame, skus: pd.DataFrame,
-                   open_po: pd.DataFrame, today: pd.Timestamp, cfg: dict[str, Any]) -> pd.DataFrame:
+def compute_policy(
+    stats: pd.DataFrame,
+    daily: np.ndarray,
+    status: pd.DataFrame,
+    skus: pd.DataFrame,
+    open_po: pd.DataFrame,
+    today: pd.Timestamp,
+    cfg: dict[str, Any],
+) -> pd.DataFrame:
     """Compute policy parameters and health metrics.
 
     Args:
@@ -77,8 +88,13 @@ def compute_policy(stats: pd.DataFrame, daily: np.ndarray, status: pd.DataFrame,
     """
     pc = cfg["policy"]
     df = stats.merge(status, on=["branch_id", "sku_id"], how="left", validate="1:1")
-    df = df.merge(skus[["sku_id", "category", "unit_cost", "holding_cost_rate", "lead_time_days",
-                        "case_pack", "obsolescence_risk"]], on="sku_id", how="left")
+    df = df.merge(
+        skus[
+            ["sku_id", "category", "unit_cost", "holding_cost_rate", "lead_time_days", "case_pack", "obsolescence_risk"]
+        ],
+        on="sku_id",
+        how="left",
+    )
     L = df["lead_time_days"].to_numpy().astype(int)
     R = int(pc["review_period_days"])
     z = norm.ppf(pc["service_level"])
@@ -109,41 +125,69 @@ def compute_policy(stats: pd.DataFrame, daily: np.ndarray, status: pd.DataFrame,
     df["p_stockout"] = stockout_probability(df["inv_position"], df["fc_lead"], df["sigma_lead"])
     df["expected_lost_units"] = expected_lost_units(df["inv_position"], df["fc_lead"], df["sigma_lead"])
     df["stockout_risk"] = df["p_stockout"] > pc["stockout_risk_threshold"]
-    order = np.where(df["inv_position"] <= df["reorder_point"],
-                     np.maximum(df["target_max"] - df["inv_position"], 0.0), 0.0)
+    order = np.where(
+        df["inv_position"] <= df["reorder_point"], np.maximum(df["target_max"] - df["inv_position"], 0.0), 0.0
+    )
     df["recommended_order_qty"] = np.ceil(order / df["case_pack"]) * df["case_pack"]
 
     df["on_hand_value"] = df["on_hand"] * df["unit_cost"]
     df["excess_value"] = df["excess_units"] * df["unit_cost"]
     df["stagnant_value"] = np.where(df["is_stagnant"], df["on_hand_value"], 0.0)
+    # stagnant stock of a SKU the whole network cannot sell through within a year cannot be fixed
+    # by transfers: flag it for liquidation / return-to-vendor instead
+    network_daily = df.groupby("sku_id")["forecast_mean_daily"].transform("sum")
+    network_stock = df.groupby("sku_id")["on_hand"].transform("sum")
+    df["network_days_of_supply"] = np.minimum(network_stock / np.maximum(network_daily, 1e-9), 10 * DOS_CAP)
+    df["liquidation_candidate"] = df["is_stagnant"] & (
+        df["network_days_of_supply"] > pc.get("liquidation_days_of_supply", 365)
+    )
     df["health"] = np.select(
         [df["is_stagnant"], df["stockout_risk"], df["excess_units"] > 0],
-        ["stagnant", "stockout_risk", "excess"], default="healthy")
+        ["stagnant", "stockout_risk", "excess"],
+        default="healthy",
+    )
     return df
 
 
+def load_daily_forecasts(paths: Any, stats: pd.DataFrame) -> tuple[np.ndarray, pd.Timestamp]:
+    """Daily point forecasts as an (n_series, horizon) array aligned with ``stats`` rows."""
+    fc = pd.read_parquet(paths.output / "forecasts", columns=["date", "branch_id", "sku_id", "forecast"])
+    fc["branch_id"] = fc["branch_id"].astype(str)
+    fc = fc.sort_values(["branch_id", "sku_id", "date"], kind="stable")
+    H = fc["date"].nunique()
+    if len(fc) != len(stats) * H:
+        raise ValueError(f"forecast rows ({len(fc)}) != series ({len(stats)}) x horizon ({H})")
+    keys = fc[["branch_id", "sku_id"]].to_numpy()[::H]
+    if not (keys == stats[["branch_id", "sku_id"]].astype(str).to_numpy()).all():
+        raise ValueError("forecasts and forecast_series_stats are not aligned")
+    return fc["forecast"].to_numpy().reshape(len(stats), H), pd.Timestamp(fc["date"].min())
+
+
 def run(config_path: str | None = None) -> pd.DataFrame:
-    """Compute and write ``inventory_policy.csv``."""
+    """Compute and write ``inventory_policy.csv`` / ``.parquet``."""
     t0 = time.time()
     cfg = load_config(config_path)
     paths = get_paths(cfg)
     stats = pd.read_parquet(paths.output / "forecast_series_stats.parquet")
-    fc = pd.read_csv(paths.output / "forecasts.csv", parse_dates=["date"])
-    H = fc["date"].nunique()
-    daily = fc["forecast"].to_numpy().reshape(len(stats), H)  # forecasts.csv is series-major
-    assert (fc["branch_id"].to_numpy()[::H] == stats["branch_id"].to_numpy()).all()
+    daily, today = load_daily_forecasts(paths, stats)
     status = pd.read_parquet(paths.processed / "inventory_status.parquet")
     skus = pd.read_csv(paths.raw / "skus.csv")
     open_po = pd.read_csv(paths.raw / "open_purchase_orders.csv", parse_dates=["due_date"])
-    today = fc["date"].min()
 
     df = compute_policy(stats, daily, status, skus, open_po, today, cfg)
+    validate(df, POLICY)
+    df.to_parquet(paths.output / "inventory_policy.parquet", index=False)
     df.to_csv(paths.output / "inventory_policy.csv", index=False)
-    summ = df.groupby("health").agg(series=("sku_id", "size"), on_hand_value=("on_hand_value", "sum"))
-    print(summ.round(0).to_string())
-    print(f"[policy] stockout-risk series: {int(df['stockout_risk'].sum()):,}  "
-          f"excess ${df['excess_value'].sum():,.0f}  stagnant ${df['stagnant_value'].sum():,.0f}  "
-          f"({time.time() - t0:.0f}s)")
+    summ = df.groupby("health")["on_hand_value"].agg(["size", "sum"])
+    log.info("health: %s", "; ".join(f"{h}={int(r['size']):,} series / ${r['sum']:,.0f}" for h, r in summ.iterrows()))
+    log.info(
+        "stock-out risk series=%s excess=$%s stagnant=$%s liquidation candidates=%s (%.0fs)",
+        f"{int(df['stockout_risk'].sum()):,}",
+        f"{df['excess_value'].sum():,.0f}",
+        f"{df['stagnant_value'].sum():,.0f}",
+        f"{int(df['liquidation_candidate'].sum()):,}",
+        time.time() - t0,
+    )
     return df
 
 

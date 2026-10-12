@@ -1,0 +1,16 @@
+-r requirements.txt
+# notebooks
+nbformat==5.11.1
+nbconvert==7.17.2
+ipykernel==7.4.0
+# tests and quality gates
+pytest==9.1.1
+pytest-cov==7.1.0
+ruff==0.17.0
+black==26.10.1
+mypy==2.4.0
+types-PyYAML==6.0.12.20260906
+pandas-stubs==3.0.5.260914
+bandit==1.9.4
+pip-audit==2.10.1
+pre-commit==4.7.0

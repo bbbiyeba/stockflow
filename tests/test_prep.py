@@ -5,8 +5,14 @@ from src.prep import clean_sales, flag_outliers, same_weekday_impute
 
 
 def test_clean_sales_dedupes_and_splits_returns():
-    s = pd.DataFrame({"date": pd.to_datetime(["2025-01-01"] * 3 + ["2025-01-02"]),
-                      "branch_id": ["B1"] * 4, "sku_id": ["S1"] * 4, "qty": [5, 5, 5, -2]})
+    s = pd.DataFrame(
+        {
+            "date": pd.to_datetime(["2025-01-01"] * 3 + ["2025-01-02"]),
+            "branch_id": ["B1"] * 4,
+            "sku_id": ["S1"] * 4,
+            "qty": [5, 5, 5, -2],
+        }
+    )
     s = s.iloc[[0, 1, 3]]  # one exact duplicate
     out, stats = clean_sales(s, {})
     assert stats["exact_duplicates_dropped"] == 1

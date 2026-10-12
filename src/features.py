@@ -34,9 +34,19 @@ NONZERO_SHARES: tuple[tuple[str, int, int], ...] = (("nz_share_91_lag28", 28, 91
 
 STATIC_CATEGORICAL: list[str] = ["branch_id", "sku_id", "region", "size_tier", "category"]
 STATIC_NUMERIC: list[str] = ["unit_cost", "list_price", "lead_time_days", "case_pack", "obsolescence_risk"]
-CALENDAR: list[str] = ["dow", "dom", "month", "weekofyear", "doy_sin", "doy_cos", "is_closed_holiday",
-                       "is_minor_holiday", "is_yearend_break", "days_to_closed_holiday",
-                       "days_after_closed_holiday"]
+CALENDAR: list[str] = [
+    "dow",
+    "dom",
+    "month",
+    "weekofyear",
+    "doy_sin",
+    "doy_cos",
+    "is_closed_holiday",
+    "is_minor_holiday",
+    "is_yearend_break",
+    "days_to_closed_holiday",
+    "days_after_closed_holiday",
+]
 PROMO: list[str] = ["discount", "on_promo", "days_into_promo", "post_promo_7d", "net_price", "price_index"]
 
 
@@ -44,17 +54,17 @@ PROMO: list[str] = ["discount", "on_promo", "days_into_promo", "post_promo_7d", 
 class Cumsums:
     """Prefix sums of Y used to compute any window statistic in O(1)."""
 
-    s: np.ndarray    # sum of values
-    s2: np.ndarray   # sum of squares
+    s: np.ndarray  # sum of values
+    s2: np.ndarray  # sum of squares
     cnt: np.ndarray  # count of non-NaN values
-    nz: np.ndarray   # count of positive values
+    nz: np.ndarray  # count of positive values
 
     @classmethod
-    def of(cls, Y: np.ndarray) -> "Cumsums":
+    def of(cls, Y: np.ndarray) -> Cumsums:
         valid = ~np.isnan(Y)
         Yz = np.where(valid, Y, 0.0).astype(np.float64)
         pad = lambda a: np.concatenate([np.zeros((a.shape[0], 1)), np.cumsum(a, axis=1)], axis=1)  # noqa: E731
-        return cls(pad(Yz), pad(Yz ** 2), pad(valid.astype(np.float64)), pad((Yz > 0).astype(np.float64)))
+        return cls(pad(Yz), pad(Yz**2), pad(valid.astype(np.float64)), pad((Yz > 0).astype(np.float64)))
 
     def window(self, arr: np.ndarray, t: np.ndarray, lag: int, w: int) -> np.ndarray:
         """Sum of ``arr``-statistic over days [t-lag-w+1, t-lag] for each column t (NaN if out of range)."""
@@ -66,29 +76,35 @@ class Cumsums:
         return out
 
 
-def dynamic_features(Y: np.ndarray, t_cols: np.ndarray, cs: Cumsums | None = None) -> dict[str, np.ndarray]:
-    """Lag / rolling features for target days ``t_cols``; each array is (n_series, len(t_cols))."""
+# Longest look-back of any feature: rmean_365_lag28 reads t-392 .. t-28.
+MAX_LOOKBACK: int = 400
+
+
+def dynamic_features(Y: np.ndarray, t_cols: np.ndarray) -> dict[str, np.ndarray]:
+    """Lag / rolling features for target days ``t_cols``; each array is (n_series, len(t_cols)).
+
+    Only ``Y[:, min(t_cols) - MAX_LOOKBACK : max(t_cols)]`` is read, so cost does not grow with
+    the length of history (important for the 28 recursive steps of the forecast).
+    """
     t_cols = np.asarray(t_cols)
-    cs = cs or Cumsums.of(Y)
+    start = max(int(t_cols.min()) - MAX_LOOKBACK, 0)
+    Y = Y[:, start : int(t_cols.max())]
+    t_cols = t_cols - start
+    cs = Cumsums.of(Y)
     out: dict[str, np.ndarray] = {}
     for k in LAGS:
-        idx = t_cols - k
-        arr = np.full((Y.shape[0], len(t_cols)), np.nan)
-        ok = idx >= 0
-        arr[:, ok] = Y[:, idx[ok]]
-        out[f"lag_{k}"] = arr
+        out[f"lag_{k}"] = _shift(Y, t_cols, k)
     with np.errstate(invalid="ignore", divide="ignore"):
         for name, lag, w in ROLLING_MEANS:
             out[name] = cs.window(cs.s, t_cols, lag, w) / cs.window(cs.cnt, t_cols, lag, w)
         for name, lag, w in ROLLING_STDS:
             n = cs.window(cs.cnt, t_cols, lag, w)
             m = cs.window(cs.s, t_cols, lag, w) / n
-            var = cs.window(cs.s2, t_cols, lag, w) / n - m ** 2
+            var = cs.window(cs.s2, t_cols, lag, w) / n - m**2
             out[name] = np.sqrt(np.clip(var, 0, None))
         for name, lag, w in NONZERO_SHARES:
             out[name] = cs.window(cs.nz, t_cols, lag, w) / cs.window(cs.cnt, t_cols, lag, w)
-        same_dow = np.stack([out["lag_7"], out["lag_14"], out["lag_28"],
-                             _shift(Y, t_cols, 21)])
+        same_dow = np.stack([out["lag_7"], out["lag_14"], out["lag_28"], _shift(Y, t_cols, 21)])
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", RuntimeWarning)  # all-NaN columns at the start of history
             out["dow_mean_4w"] = np.nanmean(same_dow, axis=0)
@@ -96,6 +112,7 @@ def dynamic_features(Y: np.ndarray, t_cols: np.ndarray, cs: Cumsums | None = Non
 
 
 def _shift(Y: np.ndarray, t_cols: np.ndarray, k: int) -> np.ndarray:
+    """Y[:, t - k] for each t in ``t_cols`` (NaN where t - k is outside Y)."""
     idx = t_cols - k
     arr = np.full((Y.shape[0], len(t_cols)), np.nan)
     ok = idx >= 0
@@ -106,15 +123,26 @@ def _shift(Y: np.ndarray, t_cols: np.ndarray, k: int) -> np.ndarray:
 def calendar_features(dates: pd.DatetimeIndex) -> pd.DataFrame:
     """Calendar and holiday features (known in advance)."""
     us = hol.US(years=range(dates.year.min() - 1, dates.year.max() + 2))
-    closed_names = ("New Year's Day", "Memorial Day", "Independence Day", "Labor Day",
-                    "Thanksgiving", "Christmas Day")
-    closed = np.array([bool(us.get(d.date())) and any(c in us.get(d.date()) for c in closed_names)
-                       and "observed" not in us.get(d.date()).lower() for d in dates])
+    closed_names = ("New Year's Day", "Memorial Day", "Independence Day", "Labor Day", "Thanksgiving", "Christmas Day")
+    closed = np.array(
+        [
+            bool(us.get(d.date()))
+            and any(c in us.get(d.date()) for c in closed_names)
+            and "observed" not in us.get(d.date()).lower()
+            for d in dates
+        ]
+    )
     minor = np.array([bool(us.get(d.date())) for d in dates]) & ~closed
     # distance to the nearest closed holiday (looking +/- 14 days, includes days outside the range)
     ext = pd.date_range(dates[0] - pd.Timedelta(days=14), dates[-1] + pd.Timedelta(days=14))
-    ext_closed = np.array([bool(us.get(d.date())) and any(c in us.get(d.date()) for c in closed_names)
-                           and "observed" not in us.get(d.date()).lower() for d in ext])
+    ext_closed = np.array(
+        [
+            bool(us.get(d.date()))
+            and any(c in us.get(d.date()) for c in closed_names)
+            and "observed" not in us.get(d.date()).lower()
+            for d in ext
+        ]
+    )
     pos = np.nonzero(ext_closed)[0]
     idx = np.arange(len(dates)) + 14
     to_next = np.full(len(dates), 15)
@@ -124,18 +152,29 @@ def calendar_features(dates: pd.DatetimeIndex) -> pd.DataFrame:
         to_next = np.where((d >= 0) & (d < to_next), d, to_next)
         since = np.where((-d >= 0) & (-d < since), -d, since)
     doy = dates.dayofyear.to_numpy()
-    return pd.DataFrame({
-        "dow": dates.dayofweek, "dom": dates.day, "month": dates.month,
-        "weekofyear": dates.isocalendar().week.to_numpy().astype(int),
-        "doy_sin": np.sin(2 * np.pi * doy / 365.25), "doy_cos": np.cos(2 * np.pi * doy / 365.25),
-        "is_closed_holiday": closed.astype(int), "is_minor_holiday": minor.astype(int),
-        "is_yearend_break": (((dates.month == 12) & (dates.day >= 24)) | ((dates.month == 1) & (dates.day <= 2))).astype(int),
-        "days_to_closed_holiday": to_next, "days_after_closed_holiday": since,
-    }, index=dates)
+    return pd.DataFrame(
+        {
+            "dow": dates.dayofweek,
+            "dom": dates.day,
+            "month": dates.month,
+            "weekofyear": dates.isocalendar().week.to_numpy().astype(int),
+            "doy_sin": np.sin(2 * np.pi * doy / 365.25),
+            "doy_cos": np.cos(2 * np.pi * doy / 365.25),
+            "is_closed_holiday": closed.astype(int),
+            "is_minor_holiday": minor.astype(int),
+            "is_yearend_break": (
+                ((dates.month == 12) & (dates.day >= 24)) | ((dates.month == 1) & (dates.day <= 2))
+            ).astype(int),
+            "days_to_closed_holiday": to_next,
+            "days_after_closed_holiday": since,
+        },
+        index=dates,
+    )
 
 
-def promo_features(discount: np.ndarray, days_into: np.ndarray, t_cols: np.ndarray,
-                   list_price: np.ndarray) -> dict[str, np.ndarray]:
+def promo_features(
+    discount: np.ndarray, days_into: np.ndarray, t_cols: np.ndarray, list_price: np.ndarray
+) -> dict[str, np.ndarray]:
     """Promotion features for each series (rows already mapped from SKU to series)."""
     disc = discount[:, t_cols]
     post = np.zeros_like(disc, dtype=bool)
@@ -145,13 +184,24 @@ def promo_features(discount: np.ndarray, days_into: np.ndarray, t_cols: np.ndarr
         post[:, ok] |= discount[:, idx[ok]] > 0
     post &= disc == 0
     net = list_price[:, None] * (1 - disc)
-    return {"discount": disc, "on_promo": (disc > 0).astype(np.float32),
-            "days_into_promo": days_into[:, t_cols], "post_promo_7d": post.astype(np.float32),
-            "net_price": net, "price_index": 1 - disc}
+    return {
+        "discount": disc,
+        "on_promo": (disc > 0).astype(np.float32),
+        "days_into_promo": days_into[:, t_cols],
+        "post_promo_7d": post.astype(np.float32),
+        "net_price": net,
+        "price_index": 1 - disc,
+    }
 
 
-def feature_frame(Y: np.ndarray, t_cols: np.ndarray, static: pd.DataFrame, cal: pd.DataFrame,
-                  discount: np.ndarray, days_into: np.ndarray, cs: Cumsums | None = None) -> pd.DataFrame:
+def feature_frame(
+    Y: np.ndarray,
+    t_cols: np.ndarray,
+    static: pd.DataFrame,
+    cal: pd.DataFrame,
+    discount: np.ndarray,
+    days_into: np.ndarray,
+) -> pd.DataFrame:
     """Assemble the model matrix for every series and every target day in ``t_cols``.
 
     Rows are ordered series-major: row = series_index * len(t_cols) + j.
@@ -166,10 +216,9 @@ def feature_frame(Y: np.ndarray, t_cols: np.ndarray, static: pd.DataFrame, cal: 
     t_cols = np.asarray(t_cols)
     n, k = Y.shape[0], len(t_cols)
     cols: dict[str, np.ndarray] = {}
-    for name, arr in dynamic_features(Y, t_cols, cs).items():
+    for name, arr in dynamic_features(Y, t_cols).items():
         cols[name] = arr.astype(np.float32).ravel()
-    for name, arr in promo_features(discount, days_into, t_cols,
-                                    static["list_price"].to_numpy()).items():
+    for name, arr in promo_features(discount, days_into, t_cols, static["list_price"].to_numpy()).items():
         cols[name] = np.asarray(arr, dtype=np.float32).ravel()
     calv = cal.iloc[t_cols]
     for c in CALENDAR:
@@ -178,13 +227,19 @@ def feature_frame(Y: np.ndarray, t_cols: np.ndarray, static: pd.DataFrame, cal: 
         cols[c] = np.repeat(static[c].to_numpy(dtype=np.float32), k)
     df = pd.DataFrame(cols)
     for c in STATIC_CATEGORICAL:
-        df[c] = pd.Categorical.from_codes(np.repeat(static[c].cat.codes.to_numpy(), k),
-                                          categories=static[c].cat.categories)
+        df[c] = pd.Categorical.from_codes(
+            np.repeat(static[c].cat.codes.to_numpy(), k), categories=static[c].cat.categories
+        )
     return df
 
 
 def feature_names() -> list[str]:
     """Ordered list of model features."""
-    dyn = [f"lag_{k}" for k in LAGS] + [r[0] for r in ROLLING_MEANS] + [r[0] for r in ROLLING_STDS] \
-        + [r[0] for r in NONZERO_SHARES] + ["dow_mean_4w"]
+    dyn = (
+        [f"lag_{k}" for k in LAGS]
+        + [r[0] for r in ROLLING_MEANS]
+        + [r[0] for r in ROLLING_STDS]
+        + [r[0] for r in NONZERO_SHARES]
+        + ["dow_mean_4w"]
+    )
     return dyn + PROMO + CALENDAR + STATIC_NUMERIC + STATIC_CATEGORICAL

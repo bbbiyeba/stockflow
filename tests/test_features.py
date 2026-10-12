@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-from src.features import Cumsums, calendar_features, dynamic_features
+from src.features import MAX_LOOKBACK, calendar_features, dynamic_features
 
 
 def _ramp(n: int = 3, T: int = 400) -> np.ndarray:
@@ -45,7 +45,7 @@ def test_no_feature_reads_the_target_day_or_later():
     base = dynamic_features(Y, t)
     Y2 = Y.copy()
     Y2[:, 420:] = 9999.0
-    leak = dynamic_features(Y2, t, Cumsums.of(Y2))
+    leak = dynamic_features(Y2, t)
     for name, arr in base.items():
         np.testing.assert_allclose(arr, leak[name], err_msg=name)
 
@@ -57,3 +57,15 @@ def test_calendar_flags_holidays_and_distances():
     assert cal.loc["2025-12-26", "days_after_closed_holiday"] == 1
     assert cal.loc["2026-01-01", "is_closed_holiday"] == 1
     assert cal.loc["2025-12-22", "dow"] == 0
+
+
+def test_lookback_window_slicing_matches_full_history():
+    """Features computed on a sliced window equal those computed on the whole history."""
+    rng = np.random.default_rng(2)
+    Y = rng.poisson(3, (4, 1200)).astype(float)
+    t = np.array([1100, 1150])
+    sliced = dynamic_features(Y, t)
+    padded = dynamic_features(np.concatenate([np.full((4, 1), np.nan), Y], axis=1), t + 1)
+    for name in sliced:
+        np.testing.assert_allclose(sliced[name], padded[name], err_msg=name)
+    assert MAX_LOOKBACK >= 365 + 28
