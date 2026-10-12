@@ -12,6 +12,7 @@ is planned by merchandising), so using their values at ``t`` is not leakage.
 
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass
 
 import holidays as hol
@@ -88,7 +89,9 @@ def dynamic_features(Y: np.ndarray, t_cols: np.ndarray, cs: Cumsums | None = Non
             out[name] = cs.window(cs.nz, t_cols, lag, w) / cs.window(cs.cnt, t_cols, lag, w)
         same_dow = np.stack([out["lag_7"], out["lag_14"], out["lag_28"],
                              _shift(Y, t_cols, 21)])
-        out["dow_mean_4w"] = np.nanmean(same_dow, axis=0) if not np.all(np.isnan(same_dow)) else same_dow[0]
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)  # all-NaN columns at the start of history
+            out["dow_mean_4w"] = np.nanmean(same_dow, axis=0)
     return out
 
 

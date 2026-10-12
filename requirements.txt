@@ -1,0 +1,19 @@
+# runtime
+numpy==2.5.3
+pandas==3.0.5
+pyarrow==25.0.1
+PyYAML==6.0.1
+scipy==1.18.1
+statsmodels==0.15.0
+holidays==0.106
+lightgbm==4.7.0
+PuLP==4.0.0
+highspy==1.15.1
+matplotlib==3.11.2
+plotly==7.1.0
+streamlit==1.65.0
+# notebooks and tests
+nbformat==5.11.1
+nbconvert==7.17.2
+ipykernel==7.4.0
+pytest==9.1.1

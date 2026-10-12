@@ -131,13 +131,13 @@ def solve_milp(prob: Problem, cfg: dict[str, Any]) -> tuple[pd.DataFrame, dict[s
     d, P = prob.nodes.set_index("node"), prob.pairs
     m = pulp.LpProblem("rebalance", pulp.LpMinimize)
     ids = P.index.to_numpy()
-    x = {k: pulp.LpVariable(f"x_{k}", lowBound=0, upBound=float(P.at[k, "upper"]), cat="Integer") for k in ids}
-    y = {k: pulp.LpVariable(f"y_{k}", cat="Binary") for k in ids}
+    x = {k: m.add_variable(f"x_{k}", lowBound=0, upBound=float(P.at[k, "upper"]), cat="Integer") for k in ids}
+    y = {k: m.add_variable(f"y_{k}", cat="Binary") for k in ids}
     senders = P["node_s"].unique()
     receivers = P["node_r"].unique()
-    ex = {i: pulp.LpVariable(f"ex_{i}", lowBound=0) for i in senders}
-    c1 = {j: pulp.LpVariable(f"c1_{j}", lowBound=0, upBound=float(d.at[j, "tier1"])) for j in receivers}
-    c2 = {j: pulp.LpVariable(f"c2_{j}", lowBound=0, upBound=float(d.at[j, "tier2"])) for j in receivers}
+    ex = {i: m.add_variable(f"ex_{i}", lowBound=0) for i in senders}
+    c1 = {j: m.add_variable(f"c1_{j}", lowBound=0, upBound=float(d.at[j, "tier1"])) for j in receivers}
+    c2 = {j: m.add_variable(f"c2_{j}", lowBound=0, upBound=float(d.at[j, "tier2"])) for j in receivers}
 
     by_s = P.groupby("node_s").groups
     by_r = P.groupby("node_r").groups
@@ -159,8 +159,8 @@ def solve_milp(prob: Problem, cfg: dict[str, Any]) -> tuple[pd.DataFrame, dict[s
     solver = pulp.HiGHS(msg=False, timeLimit=oc["solver_time_limit_s"], gapRel=oc["solver_gap"])
     t0 = time.time()
     status = m.solve(solver)
-    info = {"status": pulp.LpStatus[status], "seconds": round(time.time() - t0, 1),
-            "arcs": len(ids), "variables": len(m.variables()), "constraints": len(m.constraints)}
+    info = {"status": status.status.name, "seconds": round(time.time() - t0, 1),
+            "arcs": len(ids), "variables": len(m.variables()), "constraints": len(m.constraints())}
     qty = np.array([round(x[k].value() or 0) for k in ids])
     plan = P.assign(qty=qty)
     return plan[plan["qty"] > 0].reset_index(drop=True), info
