@@ -1,4 +1,4 @@
-"""Run the full batch pipeline: generate data -> clean -> forecast -> policy -> optimise.
+"""Run the full batch pipeline: generate data -> clean -> forecast -> policy -> optimise -> sensitivity.
 
 Each run gets a run id (logged on every line) and writes ``outputs/run_manifest.json``
 with the config, package versions, git commit, stage timings and output hashes.
@@ -6,6 +6,7 @@ with the config, package versions, git commit, stage timings and output hashes.
 Usage::
 
     python run_pipeline.py [--config config.yaml] [--skip-generate] [--from-stage forecast]
+                           [--skip-sensitivity]
 """
 
 from __future__ import annotations
@@ -15,6 +16,7 @@ import shutil
 import sys
 
 from data import generate
+from scripts import sensitivity
 from src import forecast, optimizer, policy, prep
 from src.config import PROJECT_ROOT, get_paths, load_config
 from src.runlog import StageTimer, get_logger, run_id, update_manifest
@@ -26,6 +28,7 @@ STAGES = [
     ("forecast", forecast.run),
     ("policy", policy.run),
     ("optimize", optimizer.run),
+    ("sensitivity", sensitivity.main),  # re-solves under changed assumptions -> reports/sensitivity.csv
 ]
 OUTPUTS = [
     "forecasts.csv",
@@ -38,10 +41,12 @@ OUTPUTS = [
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Run the pipeline stages in order and write the run manifest; returns the exit code."""
     ap = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
     ap.add_argument("--config", default=None)
     ap.add_argument("--skip-generate", action="store_true", help="reuse existing raw data (e.g. real extracts)")
     ap.add_argument("--from-stage", choices=[s for s, _ in STAGES], default=None)
+    ap.add_argument("--skip-sensitivity", action="store_true", help="skip the robustness re-solves (~2 min)")
     args = ap.parse_args(argv)
     cfg = load_config(args.config)
     paths = get_paths(cfg)
@@ -55,6 +60,8 @@ def main(argv: list[str] | None = None) -> int:
     names = [s for s, _ in STAGES]
     start = names.index(args.from_stage) if args.from_stage else (1 if args.skip_generate else 0)
     for name, fn in STAGES[start:]:
+        if name == "sensitivity" and args.skip_sensitivity:
+            continue
         try:
             with StageTimer(manifest, name, log):
                 fn(args.config)

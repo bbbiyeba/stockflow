@@ -14,7 +14,6 @@ SUBTLE = "#838d99"  # de-emphasised marks only, never text; 3.4:1 on white (WCAG
 GRID = "#e4e7eb"
 SURFACE = "#f5f7f9"
 ACCENT = "#0b6e69"  # 6.1:1 on white
-ACCENT_LIGHT = "#a7d3cf"
 STATUS = {"risk": "#b42318", "warn": "#b54708", "ok": "#2f7d32"}
 
 # sequential scale for heatmaps (white -> accent); status colour is never used here

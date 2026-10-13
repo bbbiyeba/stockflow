@@ -37,6 +37,7 @@ print("__PROFILE__" + json.dumps({{"seconds": round(time.time() - t0, 1), "ok": 
 
 
 def main() -> None:
+    """Run every stage and record wall time and peak memory per stage."""
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--config", default=None)
     ap.add_argument("--out", default=None)

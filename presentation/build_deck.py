@@ -35,10 +35,12 @@ DEMO_URL = "stockflow-six-mu.vercel.app"
 
 
 def money(x: float, d: int = 1) -> str:
+    """Format dollars as $1.2M, or $45k below a million."""
     return f"${x / 1e6:.{d}f}M" if abs(x) >= 1e6 else f"${x / 1e3:,.0f}k"
 
 
 def pct(x: float, d: int = 0) -> str:
+    """Format a fraction as a percentage with ``d`` decimals."""
     return f"{x * 100:.{d}f}%"
 
 
@@ -88,6 +90,7 @@ def _flat(shape):
 
 
 def rect(slide, x, y, w, h, fill, line=None, shape=MSO_SHAPE.RECTANGLE):
+    """Flat filled rectangle (no shadow)."""
     s = _flat(slide.shapes.add_shape(shape, x, y, w, h))
     s.fill.solid()
     s.fill.fore_color.rgb = fill
@@ -101,6 +104,7 @@ def rect(slide, x, y, w, h, fill, line=None, shape=MSO_SHAPE.RECTANGLE):
 
 
 def box(slide, x, y, w, h, label, fill=WHITE, line=CHARCOAL, size=13, bold=True, color=BLACK):
+    """Outlined box with centred, possibly multi-line, label."""
     s = rect(slide, x, y, w, h, fill, line)
     tf = s.text_frame
     tf.margin_left = tf.margin_right = Inches(0.06)
@@ -116,6 +120,7 @@ def box(slide, x, y, w, h, label, fill=WHITE, line=CHARCOAL, size=13, bold=True,
 
 
 def arrow(slide, x1, y1, x2, y2, color=CHARCOAL, width=1.5):
+    """Flat straight connector with an arrow head."""
     c = _flat(slide.shapes.add_connector(MSO_CONNECTOR.STRAIGHT, x1, y1, x2, y2))
     c.line.color.rgb = color
     c.line.width = Pt(width)
@@ -136,6 +141,7 @@ def picture(slide, path, x, y, w=None, h=None):
 
 
 def table(slide, x, y, w, rows, col_w, header=True, size=12, row_h=Inches(0.42), align=None, bold_last=False):
+    """Plain table: grey header, light rules, explicit alignment."""
     nr, nc = len(rows), len(rows[0])
     gt = slide.shapes.add_table(nr, nc, x, y, w, row_h * nr)
     t = gt.table
@@ -223,6 +229,7 @@ def frame(prs, title, n, notes):
 
 # --------------------------------------------------------------------------- slides
 def s1_title(prs):
+    """Slide 1: title, author and mission line."""
     s = prs.slides.add_slide(prs.slide_layouts[6])
     rect(s, ML, Inches(1.55), Inches(0.9), Inches(0.09), GOLD)
     text(s, ML, Inches(1.85), Inches(6.4), Inches(1.6), "Stockflow", size=44, bold=True, color=BLACK)
@@ -285,6 +292,7 @@ Likely question: "Why synthetic data?" Answer: I didn't have access to company d
 
 
 def s2_problem(prs):
+    """Slide 2: the inventory problem in three numbers and a chart."""
     h = F["health"]
     s = frame(
         prs,
@@ -329,6 +337,7 @@ Likely question: "How is 'above target' defined?" Answer: target is forecast dem
 
 
 def s3_approach(prs):
+    """Slide 3: pipeline architecture."""
     s = frame(
         prs,
         "One pipeline turns three years of branch data into transfers a planner approves",
@@ -394,6 +403,7 @@ Likely question: "How long does a run take?" Answer: about five minutes for this
 
 
 def s4_forecast(prs):
+    """Slide 4: forecast vs actual and the model comparison."""
     m = F["models"]
     fx = F["forecast_example"]
     improve = 1 - m["selected"]["wape"] / m["seasonal_naive"]["wape"]
@@ -464,6 +474,7 @@ Likely question: "Why is daily error still around fifty percent?" Answer: many i
 
 
 def s5_rebalance(prs):
+    """Slide 5: transfer map and the top five transfers."""
     t = F["top_transfers"]
     s = frame(
         prs,
@@ -532,6 +543,7 @@ Likely question: "How stable is the plan?" Answer: I re-solved it with service l
 
 
 def s6_impact(prs):
+    """Slide 6: before / after impact."""
     share = F["stockout_avoided_share"]
     s = frame(
         prs,
@@ -616,6 +628,7 @@ Likely question: "How are turns measured if transfers don't remove inventory?" A
 
 
 def s7_dashboard(prs):
+    """Slide 7: dashboard screenshots with callouts."""
     s = frame(
         prs,
         "A branch manager sees what to move, why, and approves it on one screen",
@@ -670,6 +683,7 @@ Likely question: "Can it execute transfers in the ERP?" Answer: deliberately not
 
 
 def s8_next(prs):
+    """Slide 8: pilot plan, limitations and the mission."""
     s = frame(
         prs,
         "Next: a 12-week pilot at 2–3 branches on real ERP and warehouse data",
@@ -734,6 +748,7 @@ Likely question: "What would you need from us?" Answer: read-only extracts for t
 
 
 def main() -> None:
+    """Build the deck from assets/ and facts.json."""
     prs = Presentation()
     prs.slide_width, prs.slide_height = W, H
     for fn in (s1_title, s2_problem, s3_approach, s4_forecast, s5_rebalance, s6_impact, s7_dashboard, s8_next):

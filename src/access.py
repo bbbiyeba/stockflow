@@ -25,6 +25,8 @@ from typing import Any
 
 @dataclass(frozen=True)
 class User:
+    """The person using the dashboard and their role (viewer or approver)."""
+
     name: str
     email: str | None
     role: str  # "viewer" | "approver"
@@ -36,10 +38,12 @@ def _flag(name: str, default: str = "0") -> bool:
 
 
 def require_login() -> bool:
+    """True when STOCKFLOW_REQUIRE_LOGIN asks for OIDC sign-in."""
     return _flag("STOCKFLOW_REQUIRE_LOGIN")
 
 
 def demo_approvals() -> bool:
+    """True when STOCKFLOW_DEMO_APPROVALS lets an unauthenticated local user record decisions."""
     return _flag("STOCKFLOW_DEMO_APPROVALS")
 
 
@@ -49,6 +53,7 @@ def mask_financials() -> bool:
 
 
 def approvers() -> set[str]:
+    """Lower-cased e-mail addresses listed in STOCKFLOW_APPROVERS."""
     return {e.strip().lower() for e in os.environ.get("STOCKFLOW_APPROVERS", "").split(",") if e.strip()}
 
 

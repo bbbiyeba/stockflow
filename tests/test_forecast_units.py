@@ -1,7 +1,14 @@
 import numpy as np
 import pandas as pd
 
-from src.forecast import _sample_plan, apply_intervals, cold_start_forecast, interval_params, segment_quantiles
+from src.forecast import (
+    _sample_plan,
+    apply_intervals,
+    cold_start_forecast,
+    interval_params,
+    segment_quantiles,
+    write_loss_report,
+)
 
 
 def test_cold_start_borrows_from_peers():
@@ -40,8 +47,8 @@ def test_intervals_monotone_non_negative_and_scaled():
 
 
 def test_sample_plan_caps_rows():
-    assert _sample_plan(1000, 540, 4000, 10_000_000) == (1.0, 540)
-    share, days = _sample_plan(30_000, 540, 490_000, 4_000_000)
+    assert _sample_plan(540, 4000, 10_000_000) == (1.0, 540)
+    share, days = _sample_plan(540, 490_000, 4_000_000)
     assert 490_000 * share * days <= 4_000_000 * 1.01 and days >= 56
 
 
@@ -53,3 +60,40 @@ def test_explain_selection_prefers_a_class_under_cap():
     assert explain_selection(abc, 10, rng).all()
     m = explain_selection(abc, 3, rng)
     assert m.sum() == 3 and m[abc == "A"].all()
+
+
+def test_loss_report_flags_groups_and_series_where_selected_is_worse(tmp_path):
+    # two series in branch B1; selected beats naive on s0 and loses on s1
+    rows = []
+    for idx, (sel, naive, ma) in enumerate([(2.0, 6.0, 5.0), (8.0, 4.0, 3.0)]):
+        for model, err in [
+            ("selected", sel),
+            ("seasonal_naive", naive),
+            ("moving_average", ma),
+            ("croston_sba", 9.0),
+            ("tsb", 9.0),
+            ("ses", 9.0),
+            ("lightgbm", sel),
+        ]:
+            rows.append(
+                dict(
+                    series_idx=idx,
+                    model=model,
+                    abs_err=err,
+                    actual_sum=10.0,
+                    n_obs=28,
+                    err=0.0,
+                    forecast_sum=10.0,
+                    sq_err=0.0,
+                    scale=1.0,
+                    abc_class="A",
+                    pattern="smooth",
+                    branch_id="B1",
+                    category="Tools",
+                )
+            )
+    out = write_loss_report(pd.DataFrame(rows), tmp_path).set_index("dimension").loc["branch_id"]
+    assert out["selected_wape"] == 0.5 and out["best_simple_model"] == "moving_average"
+    assert out["best_simple_wape"] == 0.4 and bool(out["selected_loses_to_simple"])
+    assert out["share_series_worse_than_naive"] == 0.5
+    assert (tmp_path / "holdout_where_selected_loses.csv").exists()

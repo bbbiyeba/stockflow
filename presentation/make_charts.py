@@ -8,6 +8,7 @@ data/processed/ (run `make run` first).
 from __future__ import annotations
 
 import json
+import os
 import sys
 import threading
 from functools import partial
@@ -51,10 +52,12 @@ plt.rcParams.update(
 
 
 def money(x: float) -> str:
+    """Format dollars as $1.2M, or $45k below a million."""
     return f"${x / 1e6:.1f}M" if abs(x) >= 1e6 else f"${x / 1e3:.0f}k"
 
 
 def facts() -> dict:
+    """Collect every number the deck quotes from the pipeline outputs into assets/facts.json."""
     pol = pd.read_parquet(ROOT / "outputs/inventory_policy.parquet")
     imp = pd.read_csv(ROOT / "reports/optimizer_impact.csv", index_col="metric")
     ho = pd.read_csv(ROOT / "reports/holdout_metrics_overall.csv").set_index("model")
@@ -112,6 +115,7 @@ def facts() -> dict:
 
 
 def chart_problem(f: dict) -> None:
+    """Bar chart of on-hand value by position status."""
     h = f["health"]
     rows = [
         ("Overstocked", "excess"),
@@ -135,6 +139,7 @@ def chart_problem(f: dict) -> None:
 
 
 def chart_forecast(f: dict) -> dict:
+    """Held-out forecast vs actual with the P10-P90 band for a typical A-class series."""
     ho = pd.read_parquet(ROOT / "reports/holdout_forecasts.parquet")
     pol = pd.read_parquet(ROOT / "outputs/inventory_policy.parquet")[["branch_id", "sku_id", "abc_class", "category"]]
     ho = ho.merge(pol, on=["branch_id", "sku_id"])
@@ -231,8 +236,14 @@ def _render_html(fig: go.Figure, name: str, width: int, height: int) -> None:
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     try:
         with sync_playwright() as p:
-            exe = next(Path("/opt/pw-browsers").glob("chromium-*/chrome-linux/chrome"))
-            b = p.chromium.launch(executable_path=str(exe))
+            # a pre-installed Chromium (e.g. PLAYWRIGHT_BROWSERS_PATH) if present, else `playwright install`'s
+            exe = next(
+                Path(os.environ.get("PLAYWRIGHT_BROWSERS_PATH", "/opt/pw-browsers")).glob(
+                    "chromium-*/chrome-linux/chrome"
+                ),
+                None,
+            )
+            b = p.chromium.launch(executable_path=str(exe)) if exe else p.chromium.launch()
             page = b.new_page(viewport={"width": width, "height": height}, device_scale_factor=2)
             page.goto(f"http://127.0.0.1:{srv.server_address[1]}/presentation/assets/_{name}.html")
             page.wait_for_timeout(2500)
@@ -277,6 +288,7 @@ def _geo(fig: go.Figure) -> None:
 
 
 def chart_map(f: dict, top: int = 20) -> dict:
+    """Map of the largest transfer corridors."""
     tr = pd.read_parquet(ROOT / "outputs/transfer_recommendations.parquet")
     br = pd.read_csv(ROOT / "data/raw/branches.csv").set_index("branch_id")
     flows = tr.groupby(["from_branch", "to_branch"], as_index=False).agg(
@@ -321,6 +333,7 @@ def chart_map(f: dict, top: int = 20) -> dict:
 
 
 def chart_title_map() -> None:
+    """Map of branch locations for the title slide."""
     br = pd.read_csv(ROOT / "data/raw/branches.csv")
     fig = go.Figure(
         go.Scattergeo(
@@ -335,6 +348,7 @@ def chart_title_map() -> None:
 
 
 def top_transfers(n: int = 5) -> list[dict]:
+    """The highest-saving recommended transfers."""
     tr = pd.read_parquet(ROOT / "outputs/transfer_recommendations.parquet").nlargest(n, "projected_savings")
     return [
         {
@@ -353,6 +367,7 @@ def top_transfers(n: int = 5) -> list[dict]:
 
 
 def main() -> None:
+    """Write facts.json and every chart image."""
     ASSETS.mkdir(parents=True, exist_ok=True)
     f = facts()
     chart_problem(f)

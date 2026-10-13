@@ -116,7 +116,7 @@ class Bucket:
 
 
 # --------------------------------------------------------------------------- LightGBM
-def _sample_plan(n_series: int, n_days: int, n_total: int, budget: int) -> tuple[float, int]:
+def _sample_plan(n_days: int, n_total: int, budget: int) -> tuple[float, int]:
     """Share of series and number of days to sample so the network stays within ``budget`` rows."""
     total = n_total * n_days
     if total <= budget:
@@ -130,7 +130,7 @@ def training_rows(net: Network, b: Bucket, origin: int, cfg: dict[str, Any]) -> 
     """Feature rows and targets from one bucket for a model trained at ``origin``."""
     fc = cfg["forecast"]
     lo = max(origin - fc["lgbm_train_days"], 0)
-    share, n_days = _sample_plan(b.n, origin - lo, net.n, int(fc["lgbm_max_train_rows"]))
+    share, n_days = _sample_plan(origin - lo, net.n, int(fc["lgbm_max_train_rows"]))
     rng = np.random.default_rng([cfg["data"]["seed"], origin, b.k])
     t_cols = (
         np.arange(lo, origin)
@@ -325,6 +325,42 @@ def _standardised(
 
 
 # --------------------------------------------------------------------------- run
+def write_loss_report(held: pd.DataFrame, rep: Path) -> pd.DataFrame:
+    """Where the selected model loses to a simpler one on the held-out fold.
+
+    Writes ``holdout_where_selected_loses.csv``: for the whole network (``all``) and per ABC class,
+    pattern, branch and category, the selected WAPE against seasonal naive and the best simple
+    model, and the share of individual series (with demand) on which the selected model has more
+    absolute error than seasonal naive. Returns the group table.
+    """
+    simple = [m for m in MODELS if m != "lightgbm"]
+    held = held.assign(all="all")
+    parts = []
+    for dim in ("all", "abc_class", "pattern", "branch_id", "category"):
+        g = aggregate_metrics(held, [dim, "model"]).pivot(index=dim, columns="model", values="wape")
+        wide = held.pivot_table(index="series_idx", columns="model", values="abs_err", aggfunc="sum")
+        grp = held.drop_duplicates("series_idx").set_index("series_idx")[dim]
+        has_demand = held[held["model"] == "selected"].set_index("series_idx")["actual_sum"] > 0
+        loses = (wide["selected"] > wide["seasonal_naive"])[has_demand]
+        parts.append(
+            pd.DataFrame(
+                {
+                    "dimension": dim,
+                    "group": g.index.astype(str),
+                    "selected_wape": g["selected"].to_numpy(),
+                    "seasonal_naive_wape": g["seasonal_naive"].to_numpy(),
+                    "best_simple_model": g[simple].idxmin(axis=1).to_numpy(),
+                    "best_simple_wape": g[simple].min(axis=1).to_numpy(),
+                    "share_series_worse_than_naive": loses.groupby(grp[loses.index]).mean().reindex(g.index).to_numpy(),
+                }
+            )
+        )
+    out = pd.concat(parts, ignore_index=True)
+    out["selected_loses_to_simple"] = out["selected_wape"] > out["best_simple_wape"]
+    out.to_csv(rep / "holdout_where_selected_loses.csv", index=False)
+    return out
+
+
 def run(config_path: str | None = None) -> None:
     """Backtest, select models, and write the final forecast."""
     t_start = time.time()
@@ -422,6 +458,7 @@ def run(config_path: str | None = None) -> None:
     )
     held_seg["selected_beats_naive"] = held_seg["selected"] < held_seg["seasonal_naive"]
     held_seg.reset_index().to_csv(rep / "holdout_selected_vs_naive_by_segment.csv", index=False)
+    write_loss_report(held, rep)
     for name, by in [
         ("by_abc", ["abc_class"]),
         ("by_branch", ["branch_id"]),

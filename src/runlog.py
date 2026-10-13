@@ -82,6 +82,7 @@ def sha256_file(path: Path, chunk: int = 1 << 20) -> str:
 
 
 def config_hash(cfg: dict[str, Any]) -> str:
+    """Short SHA-256 of the resolved config, recorded in the run manifest."""
     return hashlib.sha256(json.dumps(cfg, sort_keys=True, default=str).encode()).hexdigest()[:16]
 
 

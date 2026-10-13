@@ -1,15 +1,16 @@
 PY ?= python
 CONFIG ?= config.yaml
 
-.PHONY: install dev run data prep forecast policy optimize sensitivity monitor test lint format typecheck security check app eda profile scale-test docker
+.PHONY: install dev run all data prep forecast policy optimize sensitivity monitor test lint format typecheck security check app eda profile scale-test docker deck demo-bundle
 
 install:            ## runtime dependencies
 	$(PY) -m pip install -r requirements.txt
 dev:                ## runtime + dev tools + git hooks
 	$(PY) -m pip install -r requirements-dev.txt && pre-commit install
 
-run:                ## full batch pipeline: data -> clean -> forecast -> policy -> optimise
+run:                ## full batch pipeline: data -> clean -> forecast -> policy -> optimise -> sensitivity
 	$(PY) run_pipeline.py --config $(CONFIG)
+all: run eda demo-bundle   ## everything the repo publishes except the deck
 data:
 	$(PY) data/generate.py --config $(CONFIG)
 prep:
@@ -50,3 +51,7 @@ docker:
 
 demo-bundle:        ## refresh the read-only snapshot served by the hosted demo
 	$(PY) scripts/build_demo_bundle.py
+
+deck:               ## rebuild the slides from the latest outputs (pip install -r presentation/requirements.txt; LibreOffice for the PDF)
+	$(PY) presentation/make_charts.py && $(PY) presentation/build_deck.py
+	cd presentation && soffice --headless --convert-to pdf Stockflow_Stryker.pptx

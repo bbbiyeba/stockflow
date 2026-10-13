@@ -44,6 +44,7 @@ SCENARIOS: list[tuple[str, str, dict[str, Any]]] = [
 def run_scenario(
     base: dict[str, Any], cfg: dict[str, Any], change: dict[str, Any]
 ) -> tuple[dict[str, float], pd.DataFrame]:
+    """Re-solve the optimiser with one assumption changed; return its impact and plan."""
     c = copy.deepcopy(cfg)
     if "service_level" in change:
         c["policy"]["service_level"] = change["service_level"]
@@ -60,6 +61,7 @@ def run_scenario(
 
 
 def main(config_path: str | None = None) -> pd.DataFrame:
+    """Run every scenario in the config and write reports/sensitivity.csv."""
     cfg = load_config(config_path)
     paths = get_paths(cfg)
     stats = pd.read_parquet(paths.output / "forecast_series_stats.parquet")

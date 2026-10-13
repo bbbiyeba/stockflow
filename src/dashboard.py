@@ -166,6 +166,7 @@ def _load_outputs(cfg_path: str) -> dict[str, Any]:
         "coverage": pd.read_csv(p.reports / "interval_coverage.csv"),
         "branches": pd.read_csv(p.raw / "branches.csv"),
         "sensitivity": _csv(p.reports / "sensitivity.csv"),
+        "losses": _csv(p.reports / "holdout_where_selected_loses.csv"),
         "explain": (
             pd.read_parquet(p.output / "forecast_explanations.parquet")
             if (p.output / "forecast_explanations.parquet").exists()
@@ -178,6 +179,7 @@ def _load_outputs(cfg_path: str) -> dict[str, Any]:
 
 
 def load_forecast(branch: str, sku: str) -> pd.DataFrame:
+    """28-day forecast with P10 / P50 / P90 for one branch x SKU (cached per config)."""
     return _load_forecast(config_key(), branch, sku)
 
 
@@ -189,6 +191,7 @@ def _load_forecast(cfg_path: str, branch: str, sku: str) -> pd.DataFrame:
 
 
 def load_history(branch: str, sku: str) -> pd.DataFrame:
+    """Daily sales history with stock-out flags for one branch x SKU (cached per config)."""
     return _load_history(config_key(), branch, sku)
 
 
@@ -203,10 +206,12 @@ def _load_history(cfg_path: str, branch: str, sku: str) -> pd.DataFrame:
 
 
 def load_decisions(run: str) -> pd.DataFrame:
+    """Latest approve / reject decision per transfer for the given run."""
     return dlog.latest(_paths().decisions / "transfer_decisions.csv", run)
 
 
 def get_data() -> dict[str, Any]:
+    """Pipeline outputs for the current config; shows an empty state and stops if none exist."""
     try:
         return load_outputs()
     except FileNotFoundError:
@@ -233,10 +238,12 @@ def lede(text: str, kicker: str | None = None) -> None:
 
 
 def note(text: str) -> None:
+    """Render a short muted caption (HTML-escaped)."""
     st.markdown(f'<p class="note">{esc(text)}</p>', unsafe_allow_html=True)
 
 
 def csv_button(df: pd.DataFrame, name: str, label: str = "Download CSV") -> None:
+    """Download button for a table as CSV."""
     st.download_button(
         label,
         df.to_csv(index=False).encode(),
@@ -263,17 +270,75 @@ def page_slice(df: pd.DataFrame, key: str) -> pd.DataFrame:
 
 
 def money_col(label: str | None = None, **kw: Any) -> Any:
+    """Dollar column config, or a text column when financials are masked."""
     if MASK:
         return st.column_config.TextColumn(label, **kw)
     return st.column_config.NumberColumn(label, format="$%,.0f", **kw)
 
 
 def mask_money_cols(df: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
+    """Replace dollar columns with a mask when STOCKFLOW_MASK_FINANCIALS is set."""
     return df.assign(**{c: "•••" for c in cols if c in df}) if MASK else df
 
 
 # --------------------------------------------------------------------------- pages
+def dims_label(dim: str) -> str:
+    """Readable name for a reporting dimension."""
+    return {"abc_class": "ABC class", "branch_id": "Branch", "category": "Category", "pattern": "Demand pattern"}.get(
+        dim, dim
+    )
+
+
+def impact_breakdown(o: pd.Series) -> None:
+    """Before / after table for the optimiser plan, with how each figure is calculated."""
+    oc = load_config(config_key())
+    pc, opt = oc["policy"], oc["optimizer"]
+
+    def row(label: str, key: str, fmt: Callable[[float], str]) -> tuple[str, str, str] | None:
+        b, a = o.get(f"{key}_before"), o.get(f"{key}_after")
+        return None if b is None or a is None or pd.isna(b) else (label, fmt(b), fmt(a))
+
+    def share(x: float) -> str:
+        return pct(x, 1)
+
+    rows = [
+        row("Excess above target", "excess_value", m),
+        row("Annual carrying cost of excess", "annual_carrying_cost_excess", m),
+        row("Stagnant stock (no sale in 90+ days)", "stagnant_value", m),
+        row("Expected lost-sale units (lead time)", "expected_stockout_units", units),
+        row("Fill rate over lead time", "fill_rate", share),
+        row("Positions at stock-out risk", "series_at_risk", lambda x: f"{x:,.0f}"),
+        row("Share of stock value that is not excess", "non_excess_value_share", share),
+        row("Inventory turns", "inventory_turns", lambda x: f"{x:.1f}"),
+        row("Storage used, network", "storage_utilisation", share),
+        row("Branches above 90% of storage", "branches_above_90pct_capacity", lambda x: f"{x:,.0f}"),
+    ]
+    with st.expander("Before / after, and how these numbers are calculated"):
+        st.dataframe(
+            pd.DataFrame([r for r in rows if r], columns=["Measure", "Before", "After"]),
+            hide_index=True,
+            width="content",
+        )
+        st.markdown(f"""
+- **Before** is today's position with no transfers; **after** is the same position once the recommended
+  transfers arrive. Both look one replenishment lead time ahead.
+- **Excess** = units above each position's target maximum (forecast demand over the lead time and
+  review period, plus safety stock), at unit cost.
+  **Carrying cost** = excess × unit cost × the SKU's annual holding rate.
+- **Expected lost-sale units** use the forecast lead-time demand and its error (normal model); a position is
+  **at risk** when its stock-out probability exceeds {pct(pc['stockout_risk_threshold'], 0)}.
+  **Fill rate** = 1 − expected lost units ÷ forecast lead-time demand.
+- **Safety stock** targets a {pct(pc['service_level'], 0)} cycle service level.
+- **Net savings** = drop in total cost: freight + expected lost sales (valued at
+  {opt['stockout_cost_multiplier']}× unit cost) + holding and obsolescence of the excess left behind.
+  These cost settings are estimates in `config.yaml` and need agreeing with finance.
+- **Inventory turns** = annual forecast demand at cost ÷ inventory after one replenishment cycle; units moved
+  out of excess replace purchases the DC would otherwise make.
+""")
+
+
 def page_transfers(user: access.User) -> None:
+    """Transfer recommendations: headline, impact, corridor map, robustness and approvals."""
     d = get_data()
     tr, imp, br = d["transfers"], d["impact"], d["branches"]
     run_id = str(d["manifest"].get("run_id", "unknown"))
@@ -304,6 +369,8 @@ def page_transfers(user: access.User) -> None:
         f"{o['inventory_turns_after']:.1f}",
         f"{o['inventory_turns_after'] - o['inventory_turns_before']:+.1f} from {o['inventory_turns_before']:.1f}",
     )
+
+    impact_breakdown(o)
 
     with st.sidebar:
         st.markdown("### Filter transfers")
@@ -559,6 +626,7 @@ def page_transfers(user: access.User) -> None:
 
 
 def page_health(user: access.User) -> None:
+    """Inventory health by branch and category: stock-out risk, excess, stagnant, liquidate."""
     d = get_data()
     pol = d["policy"]
     st.title("Inventory health")
@@ -689,6 +757,7 @@ def page_health(user: access.User) -> None:
 
 
 def page_forecast(user: access.User) -> None:
+    """Forecast explorer for one branch x SKU: history, forecast range, drivers and policy."""
     d = get_data()
     pol = d["policy"]
     st.title("Forecast explorer")
@@ -842,6 +911,7 @@ def page_forecast(user: access.User) -> None:
 
 
 def page_accuracy(user: access.User) -> None:
+    """Held-out accuracy by model and segment, bias checks and interval coverage."""
     d = get_data()
     ho, vs = d["holdout"].set_index("model"), d["vs_naive"]
     st.title("Forecast accuracy")
@@ -924,7 +994,7 @@ def page_accuracy(user: access.User) -> None:
                 "Tie (both forecast zero)",
                 np.where(s["selected_beats_naive"], "Yes", "No"),
             ),
-            "Bias (all folds)": s["bias"] * 100,
+            "Bias (all folds)": (s["bias"] * 100).round(1) + 0.0,  # + 0.0 turns -0.0 into 0.0
             "MASE": s["mase"],
         }
     )
@@ -943,6 +1013,48 @@ def page_accuracy(user: access.User) -> None:
         },
     )
     csv_button(t, "model_selection.csv")
+
+    losses = d.get("losses")
+    if losses is not None and not losses.empty:
+        st.markdown("## Where the model does not win")
+        lost = losses[losses["selected_loses_to_simple"]]
+        worse = losses.set_index(["dimension", "group"])["share_series_worse_than_naive"]
+        note(
+            "Series by series, the selected model has more error than seasonal naive on "
+            f"{pct(worse[('all', 'all')], 0)} of those with demand in the held-out month"
+            + (
+                f" ({pct(worse[('abc_class', 'A')], 0)} of A items, {pct(worse[('abc_class', 'C')], 0)} of C items). "
+                if ("abc_class", "A") in worse.index and ("abc_class", "C") in worse.index
+                else ". "
+            )
+            + (
+                "In every branch, category, ABC class and demand pattern it beats the best simple model."
+                if lost.empty
+                else f"It loses to a simple model in {len(lost)} group(s), listed below."
+            )
+        )
+        if not lost.empty:
+            st.dataframe(
+                lost.assign(
+                    dimension=lost["dimension"].map(dims_label),
+                    selected_wape=lost["selected_wape"] * 100,
+                    best_simple_wape=lost["best_simple_wape"] * 100,
+                )[["dimension", "group", "selected_wape", "best_simple_model", "best_simple_wape"]].rename(
+                    columns={
+                        "dimension": "Dimension",
+                        "group": "Group",
+                        "selected_wape": "Selected WAPE",
+                        "best_simple_model": "Best simple model",
+                        "best_simple_wape": "Its WAPE",
+                    }
+                ),
+                hide_index=True,
+                column_config={
+                    "Selected WAPE": st.column_config.NumberColumn(format="%.1f%%"),
+                    "Its WAPE": st.column_config.NumberColumn(format="%.1f%%"),
+                },
+            )
+        csv_button(losses, "holdout_where_selected_loses.csv")
 
     st.markdown("## Bias check")
     bias = d["bias"]
@@ -1012,6 +1124,7 @@ PAGES: dict[str, tuple[str, Callable[[access.User], None]]] = {
 
 
 def current_user() -> access.User:
+    """The signed-in user and role, or an anonymous viewer when sign-in is off."""
     info = None
     try:
         info = st.user.to_dict() if st.user.is_logged_in else None

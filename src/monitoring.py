@@ -104,6 +104,7 @@ def demand_drift(history: pd.DataFrame, actuals: pd.DataFrame, stats: pd.DataFra
 
 
 def main(argv: list[str] | None = None) -> int:
+    """CLI: score new actuals against the published forecast; exit 1 when retraining is triggered."""
     ap = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
     ap.add_argument("--actuals", required=True, help="CSV of actual sales for the forecast period")
     ap.add_argument("--config", default=None)

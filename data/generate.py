@@ -454,6 +454,7 @@ class RawWriter:
 
 
 def main(config_path: str | None = None) -> None:
+    """Generate every synthetic extract (and the ground truth) described in the config."""
     cfg = load_config(config_path)
     dc = cfg["data"]
     dq = dc["quality_issues"]

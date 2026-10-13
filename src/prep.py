@@ -480,6 +480,7 @@ def promotions_daily(
 
 
 def bucket_path(paths: Paths, k: int) -> Path:
+    """Path of the cleaned daily-demand array for SKU bucket ``k``."""
     return paths.processed / "buckets" / f"bucket_{k:03d}.npz"
 
 

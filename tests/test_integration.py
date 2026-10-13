@@ -62,7 +62,8 @@ def test_outputs_are_consistent(tiny):
     checks = pd.read_csv(root / "rep" / "optimizer_checks.csv")
     assert checks["violations"].sum() == 0
     man = json.loads((root / "out" / "run_manifest.json").read_text())
-    assert set(man["stages"]) == {"generate", "prep", "forecast", "policy", "optimize"}
+    assert set(man["stages"]) == {"generate", "prep", "forecast", "policy", "optimize", "sensitivity"}
+    assert (root / "rep" / "sensitivity.csv").exists() and (root / "rep" / "holdout_where_selected_loses.csv").exists()
     assert all(s["ok"] for s in man["stages"].values())
     assert man["outputs"]["transfer_recommendations.csv"]["sha256"]
 

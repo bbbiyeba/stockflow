@@ -31,7 +31,8 @@ Base network: 25 branches, 300 SKUs, 4,889 branch × SKU series, three years of 
 | Selected per segment (mostly the global LightGBM) | **49.8%** | −0.8% | 0.72 |
 | Seasonal naive | 74.9% | +1.2% | 0.96 |
 
-- The selected models are 34% more accurate than seasonal naive, and better in every segment that has demand.
+- The selected models are 34% more accurate than seasonal naive, and better in every segment that has demand. No branch, category, ABC class or demand pattern is better served by a simple model.
+- Series by series, the selected model still has more error than seasonal naive on 19% of series with demand: 4% of A items but 34% of C items, mostly intermittent slow movers (`reports/holdout_where_selected_loses.csv`).
 - Over a full 28-day total, error falls to 12.9% (A items 12.0%).
 - No branch, category or ABC class is biased by more than 5%.
 - The P10–P90 band contains 84% of actuals, against an 80% target.
@@ -46,6 +47,10 @@ Base network: 25 branches, 300 SKUs, 4,889 branch × SKU series, three years of 
 | Excess inventory freed | $1.14M | $1.05M |
 | Annual carrying cost of excess | $2.18M → $1.92M | $2.18M → $1.93M |
 | Inventory turns | 8.4 → 8.9 | 8.4 → 8.9 |
+| Fill rate over lead time (availability) | 93.9% → 99.0% | 93.9% → 99.1% |
+| Share of stock value that is not excess (utilisation) | 37.9% → 46.4% | 37.9% → 45.8% |
+
+Network storage use stays at 58% (transfers move units, they do not add them) and no branch is above 90% of its capacity before or after. Every formula and assumption is listed on the dashboard under "Before / after, and how these numbers are calculated".
 
 **Robustness:** re-solving with one assumption changed (service level 90/98%, transfer cost ×0.5/×2, forecast error σ ×0.75/×1.5, forecast level ±10%) keeps 66–92% of the same moves, and net savings stay between $171k and $235k.
 
@@ -75,7 +80,7 @@ flowchart LR
    - Three years of daily demand with weekday, annual-by-category, holiday, promotion, trend and lifecycle effects. It runs through an (s, S) replenishment simulation with deliberately biased planners, so stock-outs and excess emerge naturally.
    - Cleaning removes duplicates and returns, imputes outage days from *past* weeks only, and caps keying errors.
    - It rebuilds the daily stock ledger from transactions, reconciled to weekly counts, and flags stock-out days, whose sales understate demand.
-   - Assumptions A1–A9 are documented in `src/prep.py`. Against the generator's ground truth, outlier detection is 99.6% precise, and stock-out flags cover 99.2% of lost-sales units.
+   - Assumptions A1–A9 are documented in `src/prep.py`. Against the generator's ground truth (see the EDA notebook), outlier flags are 99.6% precise and catch 78% of injected keying errors; the misses are small multiples on lumpy series. Stock-out flags cover 99.2% of lost-sales units, at 69% precision: they are deliberately cautious, and a wrongly flagged day only drops one training day.
 2. **Forecasting** (`src/features.py`, `src/models.py`, `src/forecast.py`).
    - Candidate models: seasonal naive, a 28-day average, Croston-SBA, TSB, and weekday-adjusted exponential smoothing.
    - A single global LightGBM (Tweedie) model uses lags of 7/14/28/364/365 days, rolling means, standard deviations and demand frequency, calendar, holiday, promotion and price features, and branch/SKU attributes. It forecasts recursively, 28 days ahead.
@@ -96,7 +101,7 @@ flowchart LR
 ```bash
 git clone https://github.com/bbbiyeba/stockflow && cd stockflow
 pip install -r requirements.txt          # Python 3.11+
-make run                                 # ~5 min: generate, clean, forecast, policy, optimise
+make run                                 # ~8 min: generate, clean, forecast, policy, optimise, sensitivity
 make app                                 # dashboard on http://localhost:8501
 ```
 
@@ -109,7 +114,14 @@ make app                                 # dashboard on http://localhost:8501
 | `make monitor ACTUALS=new_sales.csv` | Check live accuracy and drift |
 | `make eda` | Re-execute the EDA notebook |
 
-Or with Docker: `docker build -t stockflow . && docker run --rm -p 8501:8501 stockflow`.
+Or with Docker (results are kept in named volumes shared by both containers):
+
+```bash
+docker build -t stockflow .
+VOLS="-v sf-raw:/app/data/raw -v sf-processed:/app/data/processed -v sf-outputs:/app/outputs -v sf-reports:/app/reports -v sf-decisions:/app/decisions"
+docker run --rm $VOLS stockflow python run_pipeline.py   # ~9 min
+docker run --rm -p 8501:8501 $VOLS stockflow             # dashboard on http://localhost:8501
+```
 
 ## The dashboard
 
@@ -133,6 +145,17 @@ Access and safety settings (all optional, see `.env.example` and [SECURITY.md](S
 | `STOCKFLOW_MASK_FINANCIALS=1` | Hide all $ values for demos |
 | `STOCKFLOW_DEMO_APPROVALS=1` | Let an unauthenticated local user record decisions (demo only) |
 
+## Documentation
+
+| Document | For |
+|---|---|
+| [docs/MODEL_CARD.md](docs/MODEL_CARD.md) | Forecast model: data, features, metrics, intended use, limitations |
+| [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md) | A 3-minute walkthrough of the dashboard and key results |
+| [docs/FAQ.md](docs/FAQ.md) | Reviewer questions: cost to run, data privacy, ERP integration, pilot plan |
+| [docs/DATA_CONTRACT.md](docs/DATA_CONTRACT.md) | The seven extracts and their validation rules |
+| [docs/MONITORING.md](docs/MONITORING.md) | Accuracy, bias and drift checks after go-live |
+| [SECURITY.md](SECURITY.md) · [AUDIT.md](AUDIT.md) · [FINAL_REVIEW.md](FINAL_REVIEW.md) | Security model, the audit and its fixes, the final completeness review |
+
 ## Repository layout
 
 ```
@@ -152,7 +175,8 @@ src/decisions.py       approval audit log   src/access.py   roles and sign-in
 notebooks/01_eda.ipynb exploratory analysis
 scripts/               profiling and sensitivity analysis
 tests/                 unit, integration and dashboard tests
-docs/                  monitoring plan, data contract, screenshots
+docs/                  model card, demo script, FAQ, monitoring plan, data contract, screenshots
+presentation/          slide deck (.pptx, .pdf) and the scripts that build it from the outputs
 ```
 
 ## Assumptions and limitations
@@ -179,7 +203,7 @@ and enable sign-in before loading real numbers. See [SECURITY.md](SECURITY.md) a
 
 | Check | Result |
 |---|---|
-| Tests | 62 passing at 94% coverage: unit tests, a leakage guard, optimiser constraint checks, an end-to-end run on a tiny multi-bucket network, malformed-input rejection, and a render of every dashboard page |
+| Tests | 64 passing at 94% coverage: unit tests, a leakage guard, optimiser constraint checks, an end-to-end run on a tiny multi-bucket network, malformed-input rejection, and a render of every dashboard page |
 | Lint, format, types | ruff, black and mypy clean |
 | Security | bandit and pip-audit clean (0 issues, 0 known vulnerabilities) |
 | CI | GitHub Actions runs all of the above on every push |

@@ -32,3 +32,27 @@ jobs:
         run: bandit -q -c pyproject.toml -r src data app.py run_pipeline.py scripts
       - name: Dependency audit (pip-audit)
         run: pip-audit -r requirements.txt
+
+  docker:
+    # builds the published Dockerfile unmodified, runs the whole pipeline inside it and checks the dashboard
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t stockflow .
+      - name: Run the pipeline in the container
+        run: |
+          VOLS="-v sf-raw:/app/data/raw -v sf-processed:/app/data/processed -v sf-outputs:/app/outputs -v sf-reports:/app/reports -v sf-decisions:/app/decisions"
+          echo "VOLS=$VOLS" >> "$GITHUB_ENV"
+          docker run --rm $VOLS stockflow python run_pipeline.py --skip-sensitivity
+      - name: Dashboard serves the results
+        run: |
+          docker run -d --name dash -p 8501:8501 $VOLS stockflow
+          for i in $(seq 1 60); do
+            [ "$(docker inspect -f '{{.State.Health.Status}}' dash)" = healthy ] && break; sleep 2
+          done
+          docker inspect -f '{{.State.Health.Status}}' dash | grep -qx healthy
+          curl -fsS http://localhost:8501/_stcore/health
+          docker logs dash 2>&1 | tee dash.log
+          ! grep -E "Traceback|Error" dash.log

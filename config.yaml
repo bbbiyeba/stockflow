@@ -43,13 +43,13 @@ prep:
   stagnant_days: 90              # no sales for this many days => stagnant stock
 
 forecast:
-  horizon: 28
+  horizon: 28                    # forecast days ahead (also the backtest fold length)
   backtest_folds: 4              # rolling origins, each `horizon` days apart
-  seasonal_period: 7
-  moving_average_window: 28
+  seasonal_period: 7             # weekly cycle: seasonal-naive lag and MASE scale
+  moving_average_window: 28      # days averaged by the moving-average baseline
   lgbm_train_days: 540           # training window (days) per fold
   lgbm_max_train_rows: 4000000   # cap on training rows; larger networks are sampled (series x days)
-  lgbm_params:
+  lgbm_params:                   # passed straight to LightGBM (see its parameter docs)
     objective: tweedie
     tweedie_variance_power: 1.2
     learning_rate: 0.05
@@ -60,15 +60,15 @@ forecast:
     bagging_freq: 1
     lambda_l2: 1.0
     verbose: -1
-  lgbm_num_boost_round: 350
+  lgbm_num_boost_round: 350      # boosting rounds per fit
   selection_metric: wape         # metric used to pick the best model per segment
-  quantiles: [0.1, 0.5, 0.9]
+  quantiles: [0.1, 0.5, 0.9]     # forecast range written as p10 / p50 / p90
   bias_flag_threshold: 0.05      # |bias| above this is flagged in reports/bias_check.csv
   cold_start_days: 56            # series with less history get the peer-based cold-start forecast
   explain_steps: [0, 7, 14, 21]  # horizon days averaged for SHAP explanations
   explain_max_series: 60000      # SHAP is costly: above this, explain A-class first, then a random sample
   warm_start: false              # continue training the previous model (hash-verified) instead of refitting
-  warm_start_rounds: 100
+  warm_start_rounds: 100         # extra rounds added when warm_start is on
   write_csv: true                # also write outputs/forecasts.csv (Parquet is always written)
 
 policy:
@@ -86,7 +86,7 @@ optimizer:
   sender_floor: rop              # "safety_stock" or "rop": lowest level a sender may be drawn down to
   min_transfer_units: 3          # skip moves smaller than this ...
   min_transfer_value: 50.0       # ... or worth less than this ($ at cost); the larger applies
-  max_transit_days: 4
+  max_transit_days: 4            # lanes slower than this are never used
   same_region_only: false        # hard constraint
   cross_region_penalty: 0.50     # $/unit soft penalty when same_region_only is false
   stockout_cost_multiplier: 0.6  # lost margin + expediting, as a multiple of unit cost
@@ -97,7 +97,7 @@ optimizer:
   batch_arcs: 10000              # SKUs are solved in batches of about this many arcs
   workers: 0                     # parallel batch solves (0 = all cores); capacity is split up front
   solver_time_limit_s: 60        # per batch; best feasible solution is kept, greedy if none
-  solver_gap: 0.005
+  solver_gap: 0.005              # relative MILP optimality gap accepted (0.5%)
 
 # ---------------------------------------------------------------------------
 # 3. Monitoring (python -m src.monitoring --actuals new_sales.csv)

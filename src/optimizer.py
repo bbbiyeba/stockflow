@@ -530,8 +530,18 @@ def apply_plan(nodes: pd.DataFrame, plan: pd.DataFrame) -> pd.DataFrame:
     return d
 
 
-def impact(nodes: pd.DataFrame, plan: pd.DataFrame, risk_threshold: float = 0.2) -> dict[str, float]:
+def impact(
+    nodes: pd.DataFrame,
+    plan: pd.DataFrame,
+    risk_threshold: float = 0.2,
+    capacity: pd.Series | None = None,
+) -> dict[str, float]:
     """Business impact of a plan versus doing nothing.
+
+    Availability is the expected fill rate over the lead time: 1 - expected lost units / forecast
+    lead-time demand. Utilisation is the share of on-hand value that is not excess, and, when
+    ``capacity`` (branch_id -> storage units) is given, network storage use and the number of
+    branches above 90% of their storage capacity.
 
     Inventory turns use projected inventory after one replenishment cycle: positions below
     target are replenished up to target either way, so units moved out of excess are units
@@ -551,6 +561,28 @@ def impact(nodes: pd.DataFrame, plan: pd.DataFrame, risk_threshold: float = 0.2)
     t = objective_terms(nodes, plan)
     base = objective_terms(nodes, plan.iloc[0:0])
     unit_cost = nodes.set_index("node")["unit_cost"]
+    demand_lead = float(a["fc_lead"].sum())
+    on_hand_value = float((a["on_hand"] * cost).sum())
+    extra: dict[str, float] = {
+        "fill_rate_before": 1 - float(lost_before.sum()) / demand_lead if demand_lead else np.nan,
+        "fill_rate_after": 1 - float(lost_after.sum()) / demand_lead if demand_lead else np.nan,
+        "non_excess_value_share_before": (
+            1 - float((exc_before * cost).sum()) / on_hand_value if on_hand_value else np.nan
+        ),
+        "non_excess_value_share_after": (
+            1 - float((exc_after * cost).sum()) / on_hand_value if on_hand_value else np.nan
+        ),
+    }
+    if capacity is not None:
+        cap = capacity.astype(float)
+        before = a.groupby("branch_id")["on_hand"].sum().reindex(cap.index, fill_value=0.0)
+        after = a.groupby("branch_id")["on_hand_after"].sum().reindex(cap.index, fill_value=0.0)
+        extra |= {
+            "storage_utilisation_before": float(before.sum() / cap.sum()),
+            "storage_utilisation_after": float(after.sum() / cap.sum()),
+            "branches_above_90pct_capacity_before": int((before > 0.9 * cap).sum()),
+            "branches_above_90pct_capacity_after": int((after > 0.9 * cap).sum()),
+        }
     return {
         "transfers": len(plan),
         "units_moved": float(plan["qty"].sum()),
@@ -573,6 +605,7 @@ def impact(nodes: pd.DataFrame, plan: pd.DataFrame, risk_threshold: float = 0.2)
         "objective_before": base["total"],
         "objective_after": t["total"],
         "net_savings": base["total"] - t["total"],
+        **extra,
     }
 
 
@@ -627,7 +660,10 @@ def run(config_path: str | None = None) -> None:
     describe_plan(prob, greedy).to_csv(paths.output / "transfer_recommendations_greedy.csv", index=False)
     batch_info.to_csv(paths.reports / "optimizer_batches.csv", index=False)
     thr = cfg["policy"]["stockout_risk_threshold"]
-    imp = pd.DataFrame({"optimizer": impact(prob.nodes, plan, thr), "greedy": impact(prob.nodes, greedy, thr)})
+    cap = branches.set_index("branch_id")["storage_capacity_units"]
+    imp = pd.DataFrame(
+        {"optimizer": impact(prob.nodes, plan, thr, cap), "greedy": impact(prob.nodes, greedy, thr, cap)}
+    )
     imp.loc["solve_seconds"] = [round(opt_sec, 1), round(g_sec, 1)]
     imp.loc["rows_with_non_positive_savings"] = [int((recs["projected_savings"] <= 0).sum()), np.nan]
     imp.index.name = "metric"

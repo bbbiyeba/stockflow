@@ -5,7 +5,7 @@ import pandas as pd
 import pytest
 
 from src.config import load_config
-from src.optimizer import apply_plan, build_problem, describe_plan, objective_terms, solve_greedy, solve_milp
+from src.optimizer import apply_plan, build_problem, describe_plan, impact, objective_terms, solve_greedy, solve_milp
 
 
 def _network(seed: int = 0, n_branch: int = 6, n_sku: int = 8):
@@ -181,3 +181,15 @@ def test_parallel_batches_respect_all_constraints():
     plan, info = solve_decomposed(prob, cfg)
     assert len(info) > 1
     assert not any(check_plan(prob, plan).values())
+
+
+def test_impact_reports_availability_and_utilisation(solved):
+    _, prob, plan, _ = solved
+    pol, branches, _ = _network()
+    cap = branches.set_index("branch_id")["storage_capacity_units"]
+    imp = impact(prob.nodes, plan, 0.2, cap)
+    # transfers move units, they do not create them: network storage use is unchanged
+    assert imp["storage_utilisation_after"] == pytest.approx(imp["storage_utilisation_before"])
+    assert 0 <= imp["fill_rate_before"] <= imp["fill_rate_after"] <= 1
+    assert imp["non_excess_value_share_after"] >= imp["non_excess_value_share_before"]
+    assert "storage_utilisation_before" not in impact(prob.nodes, plan)
