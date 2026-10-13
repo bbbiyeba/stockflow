@@ -73,7 +73,7 @@ Source: `reports/holdout_metrics_overall.csv`.
   - The detail is in `reports/holdout_where_selected_loses.csv` and on the dashboard's Forecast accuracy page.
 - **Bias:** no branch, category, ABC class or pattern is biased by more than 5% (`reports/bias_check.csv`).
 - **Ranges:** the P10–P90 range held 84% of held-out actuals against an 80% target (`reports/interval_coverage.csv`).
-- **At 10× scale** (250 branches, 3,000 SKUs): held-out WAPE is 50.8%.
+- **At 10× scale** (250 branches, 3,000 SKUs): held-out WAPE is 50.8%, against 75.8% for seasonal naive. Bias is −2.6%, and 8 branches plus the Tools category are under-forecast by 5–9%; this is logged as D14 in [AUDIT.md](../AUDIT.md).
 
 ## Limitations and risks
 

@@ -10,13 +10,9 @@
 - **Date:** 2026-10-13.
 - **Data:** all figures are from the synthetic network (25 branches, 300 SKUs, 4,889 branch × SKU series).
 
-**Result:** 47 checklist items: 44 PASS, 3 PARTIAL, 0 FAIL.
-- **Fixed in this pass:** 12 of the PASS items started as FAIL (4) or PARTIAL (8) and were fixed and re-verified.
-- **Still PARTIAL:**
-  - the brand-colour check and the GitHub Release object, which need something this environment can't reach or a click by a person;
-  - the 10x re-run, which was stopped by this session's time limit midway through forecasting, not by a failure.
-
-  See "Open items" at the end.
+**Result:** 47 checklist items: 45 PASS, 2 PARTIAL, 0 FAIL.
+- **Fixed in this pass:** 13 of the PASS items started as FAIL (4) or PARTIAL (9) and were fixed and re-verified.
+- **Still PARTIAL:** the brand-colour check and the GitHub Release object, which need something this environment can't reach or a click by a person. See "Open items" at the end.
 
 ---
 
@@ -75,27 +71,46 @@ The Docker check here needed a sandbox-only build copy: this environment's netwo
 
 | Check | Status | Evidence |
 |---|---|---|
-| Every critical and high item fixed and verified | PASS | All 4 critical and 22 high items in AUDIT.md are marked Fixed, and no critical or high item is open. Their fixes are exercised by the tests and the 1x runs; the 10x scale items were verified in the audit's full 10x run, and partly re-verified below |
-| Deferred items have a reason and a next step | **was PARTIAL → PASS** | U9 (chart ARIA) and U13 (dark theme) had a reason but no next step; both now have one. New finding D13 (A-class lumpy series under-forecast by 7.2%) added with a reason and next step. Totals: 68 found, 58 fixed, 10 deferred or accepted |
-| 10x scale test still passes after all changes | PARTIAL | See below |
+| Every critical and high item fixed and verified | PASS | All 4 critical and 22 high items in AUDIT.md are marked Fixed, and no critical or high item is open. Their fixes are exercised by the tests and the 1x runs; the 10x scale items are re-verified below |
+| Deferred items have a reason and a next step | **was PARTIAL → PASS** | U9 (chart ARIA) and U13 (dark theme) had a reason but no next step; both now have one. New finding D13 (A-class lumpy series under-forecast by 7.2%) added with a reason and next step. Totals: 69 found, 58 fixed, 11 deferred or accepted (D14 was found in the 10x re-run below) |
+| 10x scale test still passes after all changes | **was PARTIAL → PASS** | All five stages pass on the final code; see below |
 | No secrets in repo or history; `.env.example` present | PASS | `git log --all -p` scanned for key, token, password, private-key and `ghp_` / `sk-` patterns: only documentation mentions. `.env.example` is tracked; `.env` and `.streamlit/secrets.toml` are git-ignored |
 
 **10x scale test** (250 branches, 3,000 SKUs, `scripts/profile_pipeline.py --config configs/scale_10x.yaml`):
 
-Re-run on `4478beb` with the 10x config. **Not completed: the session stopped it, it did not fail.**
+Re-run on the final code (`4478beb`; later commits change only documentation and the release workflow). The first attempt passed generate and prep, then this session's 2-hour limit on background jobs stopped it partway through forecasting. The forecast stage was then run on its own, followed by policy and optimize, each from the previous stage's saved output.
 
 | Stage | This review | Last full 10x run (AUDIT.md) |
 |---|---|---|
 | generate | ok, 472 s, peak 6.5 GB | 384 s, 6.5 GB |
 | prep | ok, 3,103 s, peak 5.8 GB | 2,324 s, 5.9 GB |
-| forecast | stopped about 44 min in by this session's 2-hour limit on background jobs; it was running normally (3.4 GB memory, no errors) | 5,827 s, 9.5 GB before the SHAP cap |
-| policy, optimize | not reached | 30 s; 785 s, 163 parallel batches, all optimal |
+| forecast | ok, 4,109 s, peak 10.2 GB | 5,827 s, 9.5 GB, before the SHAP cap |
+| policy | ok, 36 s, peak 3.9 GB | 30 s, 3.9 GB |
+| optimize | ok, 855 s, peak 2.0 GB | 785 s, 2.0 GB |
+| **total** | **8,575 s (2.4 h)** | about 2.6 h |
 
-- **Speed:** generation and cleaning ran 23–33% slower than before. This pass did not change their code; the likely cause is other checks running at the same time and disk speed varying between sessions.
-- **What changed since the last full 10x run:**
-  - the loss report and the new impact rows, both cheap aggregations;
-  - the sensitivity stage, which the profiler does not run.
-- **To close:** run `python scripts/profile_pipeline.py --config configs/scale_10x.yaml --stages forecast,policy,optimize`, about 75 minutes on a 4-core, 15 GB machine.
+**Results at 10x:** 487,747 series.
+
+| Measure | Result |
+|---|---|
+| Held-out WAPE | 50.8%, against 75.8% for seasonal naive (33% better) |
+| 28-day-total WAPE | 14.1% |
+| P10–P90 coverage | 84.0% |
+| Optimiser | 163 batches, all optimal, 0 sanity-check violations |
+| Transfers | 130,319 |
+| Net savings | $42.8M, against $40.6M for greedy |
+| Fill rate | 94.0% → 99.9% |
+| Positions at stock-out risk | 34,365 → 2,311 |
+| Peak memory | 10.2 GB, on a 15 GB machine |
+
+- **Matches the last run:** held-out WAPE and both savings figures are the same as in the audit's 10x run.
+- **Speed:** generate and prep ran 23–33% slower than before. Forecasting ran 30% faster than before the SHAP cap, close to the ≈3,800 s projected in AUDIT.md. This pass did not change the generate or prep code; the likely cause is other checks running at the same time and disk speed varying between sessions.
+- **New finding (logged as D14 in AUDIT.md):** the 10x forecast leans low.
+  - Overall bias is −2.6%, against −0.8% at 1x.
+  - 8 of the 68 branches large enough to judge, and the Tools category (−6.0%), are under-forecast by 5–9%.
+  - At 1x no group exceeds 5%.
+  - The likely cause is the training cap (at most 4M of about 263M rows at 10x).
+  - Bias is reported per branch in `reports_10x/bias_check.csv`, so it is visible.
 
 ---
 
@@ -161,11 +176,10 @@ These are listed as limitations in the README, model card and slide 8.
 
 ---
 
-## Open items (the 3 PARTIALs plus 2 environment limits)
+## Open items (the 2 PARTIALs plus 2 environment limits)
 
 | Item | Why | What closes it |
 |---|---|---|
-| 10x re-run on the final code | Generation and cleaning passed; this session's 2-hour background limit stopped the forecast stage | Run `python scripts/profile_pipeline.py --config configs/scale_10x.yaml --stages forecast,policy,optimize` (about 75 min) |
 | Brand colour verified on stryker.com | Site unreachable from this environment | Check #FFB502 against Stryker's brand guide |
 | `v1.0.0` tag and GitHub Release | This environment's git proxy rejects tag pushes, and no tool here creates releases | GitHub → Releases → Draft a new release → new tag `v1.0.0` on `main` → paste CHANGELOG.md → Publish |
 | Hosted demo publicly reachable, live WebSocket | The demo can only be fetched through Vercel's authenticated bypass; WebSockets can't be tested from here | Open stockflow-six-mu.vercel.app in a private window and click between pages |

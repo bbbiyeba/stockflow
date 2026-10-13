@@ -54,9 +54,10 @@ Network storage use stays at 58% (transfers move units, they do not add them) an
 
 **Robustness:** re-solving with one assumption changed (service level 90/98%, transfer cost ×0.5/×2, forecast error σ ×0.75/×1.5, forecast level ±10%) keeps 66–92% of the same moves, and net savings stay between $171k and $235k.
 
-**Scale:** at 10x (250 branches, 3,000 SKUs, ~490k series) the pipeline completes on a 4-core, 15 GB machine.
+**Scale:** at 10x (250 branches, 3,000 SKUs, ~490k series) the pipeline completes on a 4-core, 15 GB machine in 2.4 hours, with a peak of 10.2 GB memory.
 - Held-out WAPE is 50.8%.
-- The optimiser solves 163 parallel batches to optimality in 13 minutes, saving $42.8M vs $40.6M greedy.
+- The optimiser solves 163 parallel batches to optimality in 14 minutes, saving $42.8M vs $40.6M greedy.
+- The 10x forecast leans low: bias is −2.6%, and 8 of 250 branches plus the Tools category are under-forecast by 5–9%. This is logged as D14 in AUDIT.md.
 
 Timings are in [AUDIT.md](AUDIT.md).
 
