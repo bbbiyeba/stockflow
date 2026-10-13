@@ -81,6 +81,7 @@ Source: `reports/holdout_metrics_overall.csv`.
 |---|---|---|
 | Synthetic data only | Absolute accuracy will differ on real data | Shadow pilot on real extracts before any decision |
 | Daily demand for slow movers is mostly noise | Daily WAPE stays high; for C-class intermittent items it is above 100% | Plan on lead-time and 28-day totals (12.9% error), not single days |
+| A-class lumpy series are under-forecast by 7.2% (all folds) | Slightly low safety stock for these positions | Logged as deferred item D13 in [AUDIT.md](../AUDIT.md): extend the bias check to segments and correct per segment |
 | Lost sales are excluded, not reconstructed | Demand at chronically short branches may be understated | Held-out bias is reported per branch (`reports/bias_check.csv`); live monitoring checks bias by ABC class |
 | Normal error model for safety stock | Crude for very slow movers | Error σ comes from weekly backtest blocks, which capture autocorrelation |
 | Ranges over-cover slightly (84% vs 80%) | Conservative | Per-segment scaling is logged as deferred item D7 in [AUDIT.md](../AUDIT.md) |

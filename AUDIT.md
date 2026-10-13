@@ -25,9 +25,9 @@ cheap, otherwise deferred with a reason.
 
 | | critical | high | medium | low | total |
 |---|---|---|---|---|---|
-| Found | 4 | 22 | 33 | 8 | 67 |
+| Found | 4 | 22 | 34 | 8 | 68 |
 | Fixed | 4 | 22 | 29 | 3 | 58 |
-| Deferred / accepted | 0 | 0 | 4 | 5 | 9 |
+| Deferred / accepted | 0 | 0 | 5 | 5 | 10 |
 
 ---
 
@@ -206,6 +206,7 @@ decision log), so the two scale independently.
 | D10 | Optimiser sanity rules were only checked in tests. | `src/optimizer.py:296` | medium | **Fixed**: `check_plan()` blocks publishing on any violation (conservation, sender ≥ safety stock and floor, receiver ≤ target, capacity, minimum quantity, circular lanes); results go to `reports/optimizer_checks.csv`. Per-row savings ≤ 0: 0 of 883 at 1x; 2 of 130k at 10x, an artefact of allocating shared receiver benefit across rows; the plan as a whole is net positive.. |
 | D11 | Outlier thresholds use each series' whole-history 99th percentile (mild look-ahead). | `src/prep.py:115` | medium | **Deferred**: affects < 0.03% of rows; a rolling quantile would remove it. |
 | D12 | ABC class comes from the last 365 days, which includes backtest periods. | `data/generate.py:362` | low | **Accepted**: used for segmentation and reporting only, never as a model feature. |
+| D13 | (Found in the final review) The global model under-forecasts A-class lumpy series by 7.2% across all backtest folds; the bias check covers branch, category, ABC class and pattern but not their combinations, so it was not flagged. | `src/forecast.py` bias check | medium | **Deferred**: safety stock absorbs part of it (σ is measured on the same residuals). Next step: add the ABC × pattern segment to `bias_check.csv`, and apply a per-segment bias correction fitted on folds 1–3 if it persists on real data. |
 
 **Verified:**
 - Folds are strictly time-ordered.
