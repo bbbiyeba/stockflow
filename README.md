@@ -13,6 +13,8 @@ rejects each move.
 
 ![Transfer recommendations](docs/screenshots/transfers.png)
 
+**Live demo (view-only):** [stockflow-six-mu.vercel.app](https://stockflow-six-mu.vercel.app) · **Slides:** [presentation/Stockflow_Stryker.pdf](presentation/Stockflow_Stryker.pdf) (rebuild with `python presentation/make_charts.py && python presentation/build_deck.py`)
+
 ## Results
 
 Base network: 25 branches, 300 SKUs, 4,889 branch × SKU series, three years of daily history.

@@ -478,12 +478,27 @@ def run(config_path: str | None = None) -> None:
     qs_cal = segment_quantiles(pd.concat(z_cal, ignore_index=True), qlev)
     qs = segment_quantiles(pd.concat(z_all, ignore_index=True), qlev)
 
-    cov_parts = []
+    cov_parts, held_parts = [], []
+    held_dates = net.all_dates[origins[-1] : origins[-1] + H]
     for rows_k, a, point in last_fold:
         qf = apply_intervals(point, sig_cal[rows_k], seg_last[rows_k], qs_cal)
         ok = ~np.isnan(a)
         inside = (a >= qf[:, :, 0]) & (a <= qf[:, :, -1])
         cov_parts.append(pd.DataFrame({"segment": np.repeat(seg_last[rows_k], H)[ok.ravel()], "inside": inside[ok]}))
+        held_parts.append(
+            pd.DataFrame(
+                {
+                    "branch_id": np.repeat(s["branch_id"].astype(str).to_numpy()[rows_k], H),
+                    "sku_id": np.repeat(s["sku_id"].astype(str).to_numpy()[rows_k], H),
+                    "date": np.tile(held_dates, len(rows_k)),
+                    "forecast": point.ravel().astype(np.float32),
+                    **{f"p{int(q * 100)}": qf[:, :, i].ravel().astype(np.float32) for i, q in enumerate(qlev)},
+                    "actual": a.ravel().astype(np.float32),  # NaN = not scored (missing / outlier / stock-out)
+                }
+            )
+        )
+    # held-out fold forecasts with calibrated intervals, for forecast-vs-actual charts
+    pd.concat(held_parts, ignore_index=True).to_parquet(rep / "holdout_forecasts.parquet", index=False)
     cov_df = pd.concat(cov_parts, ignore_index=True)
     coverage = (
         cov_df.groupby("segment")["inside"]
