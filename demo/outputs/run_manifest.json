@@ -1,0 +1,178 @@
+{
+  "run_id": "20261013T004839Z-e5687d",
+  "created_at": "2026-10-13T00:48:40.778671+00:00",
+  "stages": {
+    "prep": {
+      "seconds": 20.9,
+      "ok": true,
+      "finished_at": "2026-10-13T00:49:01.685802+00:00"
+    },
+    "forecast": {
+      "seconds": 268.0,
+      "ok": true,
+      "finished_at": "2026-10-13T00:53:29.725138+00:00"
+    },
+    "policy": {
+      "seconds": 0.3,
+      "ok": true,
+      "finished_at": "2026-10-13T00:53:30.070754+00:00"
+    },
+    "optimize": {
+      "seconds": 14.7,
+      "ok": true,
+      "finished_at": "2026-10-13T00:53:44.818687+00:00"
+    }
+  },
+  "outputs": {
+    "forecasts.csv": {
+      "sha256": "15a1b1d39b1a500ad03e6235627f9e4f020685b34739bb1e2054b24229b72b4b",
+      "bytes": 7193320
+    },
+    "forecast_series_stats.parquet": {
+      "sha256": "a074212316e173c40f3a7cf5167efa357bf94aa81052236712b9aef7b6a71254",
+      "bytes": 270105
+    },
+    "lightgbm_model.txt": {
+      "sha256": "9970478c80b11f010053923e84385f5df3bed6e5ce8e7d6baa359f4e5fb58078",
+      "bytes": 2830103
+    },
+    "inventory_policy.parquet": {
+      "sha256": "66e06fa795e32529483de4d2feb393f78b06945cca2045ec9f18fe59a3527a5a",
+      "bytes": 879128
+    },
+    "transfer_recommendations.csv": {
+      "sha256": "3279a0233e3b734daa99f226d5f3c6e3a2a75ab51c9d07a3cb5bfab186fe86eb",
+      "bytes": 377781
+    },
+    "transfer_recommendations.parquet": {
+      "sha256": "033235858b896427cf0111aafa645e7f75be386b37ee80b6648df7ec9b057208",
+      "bytes": 113027
+    }
+  },
+  "config": {
+    "paths": {
+      "raw_dir": "data/raw",
+      "processed_dir": "data/processed",
+      "output_dir": "outputs",
+      "reports_dir": "reports",
+      "decisions_dir": "decisions"
+    },
+    "data": {
+      "seed": 42,
+      "n_branches": 25,
+      "n_skus": 300,
+      "start_date": "2023-10-01",
+      "end_date": "2026-09-30",
+      "assortment_coverage": [
+        0.35,
+        0.95
+      ],
+      "chunk_series": 60000,
+      "raw_format": "csv",
+      "write_truth": true,
+      "quality_issues": {
+        "outage_branch_day_rate": 0.004,
+        "random_row_drop_rate": 0.002,
+        "outlier_rate": 0.0003,
+        "return_rate": 0.0005,
+        "duplicate_rate": 0.0005,
+        "bad_adjustment_rate": 5e-05,
+        "missing_snapshot_rate": 0.01
+      }
+    },
+    "prep": {
+      "bucket_series": 30000,
+      "duckdb_memory_limit": "4GB",
+      "outlier_q99_multiple": 3.0,
+      "outlier_min_qty": 10,
+      "max_plausible_adjustment": 10,
+      "impute_weeks": 4,
+      "stagnant_days": 90
+    },
+    "forecast": {
+      "horizon": 28,
+      "backtest_folds": 4,
+      "seasonal_period": 7,
+      "moving_average_window": 28,
+      "lgbm_train_days": 540,
+      "lgbm_max_train_rows": 4000000,
+      "lgbm_params": {
+        "objective": "tweedie",
+        "tweedie_variance_power": 1.2,
+        "learning_rate": 0.05,
+        "num_leaves": 63,
+        "min_data_in_leaf": 200,
+        "feature_fraction": 0.8,
+        "bagging_fraction": 0.8,
+        "bagging_freq": 1,
+        "lambda_l2": 1.0,
+        "verbose": -1
+      },
+      "lgbm_num_boost_round": 350,
+      "selection_metric": "wape",
+      "quantiles": [
+        0.1,
+        0.5,
+        0.9
+      ],
+      "bias_flag_threshold": 0.05,
+      "cold_start_days": 56,
+      "explain_steps": [
+        0,
+        7,
+        14,
+        21
+      ],
+      "explain_max_series": 60000,
+      "warm_start": false,
+      "warm_start_rounds": 100,
+      "write_csv": true
+    },
+    "policy": {
+      "service_level": 0.95,
+      "review_period_days": 14,
+      "stockout_risk_threshold": 0.2,
+      "liquidation_days_of_supply": 365
+    },
+    "optimizer": {
+      "excess_cost_min_days": 28,
+      "excess_cost_max_days": 365,
+      "sender_floor": "rop",
+      "min_transfer_units": 3,
+      "min_transfer_value": 50.0,
+      "max_transit_days": 4,
+      "same_region_only": false,
+      "cross_region_penalty": 0.5,
+      "stockout_cost_multiplier": 0.6,
+      "safety_stock_tier_weight": 0.35,
+      "obsolescence_multiplier_stagnant": 3.0,
+      "max_senders_per_receiver": 8,
+      "max_receivers_per_sender": 8,
+      "batch_arcs": 10000,
+      "workers": 0,
+      "solver_time_limit_s": 60,
+      "solver_gap": 0.005
+    },
+    "monitoring": {
+      "wape_degradation": 0.2,
+      "bias_limit": 0.1,
+      "coverage_tolerance": 0.1,
+      "psi_limit": 0.25
+    }
+  },
+  "config_hash": "e1e4c1c0bb7160c5",
+  "seed": 42,
+  "versions": {
+    "python": "3.13.16",
+    "numpy": "2.5.3",
+    "pandas": "3.0.5",
+    "pyarrow": "25.0.1",
+    "duckdb": "1.5.6",
+    "lightgbm": "4.7.0",
+    "PuLP": "4.0.0",
+    "highspy": "1.15.1",
+    "scipy": "1.18.1",
+    "pandera": "0.34.1"
+  },
+  "git_commit": "1fc1bd3b8aa2c57734c4263691d678d5c2cc9d70"
+}

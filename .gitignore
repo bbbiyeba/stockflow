@@ -20,3 +20,7 @@ htmlcov/
 .ruff_cache/
 .pytest_cache/
 decisions_10x/
+# hosted-demo snapshot is committed on purpose (scripts/build_demo_bundle.py)
+!demo/outputs/
+!demo/reports/
+!demo/decisions/

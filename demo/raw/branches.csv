@@ -1,0 +1,26 @@
+branch_id,branch_name,region,lat,lon,size_tier,storage_capacity_units
+B01,Boston,Northeast,42.36,-71.06,Small,14256
+B02,Hartford,Northeast,41.76,-72.67,Medium,21114
+B03,Newark,Northeast,40.74,-74.17,Small,16612
+B04,Philadelphia,Northeast,39.95,-75.17,Small,22343
+B05,Baltimore,Northeast,39.29,-76.61,Medium,25372
+B06,Pittsburgh,Northeast,40.44,-79.99,Medium,34226
+B07,Charlotte,Southeast,35.23,-80.84,Large,48794
+B08,Atlanta,Southeast,33.75,-84.39,Large,87541
+B09,Nashville,Southeast,36.16,-86.78,Medium,26821
+B10,Orlando,Southeast,28.54,-81.38,Medium,33097
+B11,Tampa,Southeast,27.95,-82.46,Medium,35142
+B12,Raleigh,Southeast,35.78,-78.64,Small,15450
+B13,Chicago,Midwest,41.88,-87.63,Medium,32864
+B14,Columbus,Midwest,39.96,-83.0,Medium,40573
+B15,Indianapolis,Midwest,39.77,-86.16,Medium,34778
+B16,Detroit,Midwest,42.33,-83.05,Medium,46282
+B17,Milwaukee,Midwest,43.04,-87.91,Large,32549
+B18,St. Louis,Midwest,38.63,-90.2,Medium,28701
+B19,Dallas,Southwest,32.78,-96.8,Large,92663
+B20,Houston,Southwest,29.76,-95.37,Medium,33367
+B21,Austin,Southwest,30.27,-97.74,Small,21368
+B22,Phoenix,Southwest,33.45,-112.07,Large,54367
+B23,Denver,West,39.74,-104.99,Large,27139
+B24,Salt Lake City,West,40.76,-111.89,Medium,43529
+B25,Sacramento,West,38.58,-121.49,Medium,43858

@@ -1,0 +1,98 @@
+# Hosted demo: the dashboard reads a pre-built, read-only snapshot in demo/ (see scripts/build_demo_bundle.py).
+paths:
+  raw_dir: demo/raw
+  processed_dir: demo/processed
+  output_dir: demo/outputs
+  reports_dir: demo/reports
+  decisions_dir: demo/decisions
+data:
+  seed: 42
+  n_branches: 25
+  n_skus: 300
+  start_date: '2023-10-01'
+  end_date: '2026-09-30'
+  assortment_coverage:
+  - 0.35
+  - 0.95
+  chunk_series: 60000
+  raw_format: csv
+  write_truth: true
+  quality_issues:
+    outage_branch_day_rate: 0.004
+    random_row_drop_rate: 0.002
+    outlier_rate: 0.0003
+    return_rate: 0.0005
+    duplicate_rate: 0.0005
+    bad_adjustment_rate: 5.0e-05
+    missing_snapshot_rate: 0.01
+prep:
+  bucket_series: 30000
+  duckdb_memory_limit: 4GB
+  outlier_q99_multiple: 3.0
+  outlier_min_qty: 10
+  max_plausible_adjustment: 10
+  impute_weeks: 4
+  stagnant_days: 90
+forecast:
+  horizon: 28
+  backtest_folds: 4
+  seasonal_period: 7
+  moving_average_window: 28
+  lgbm_train_days: 540
+  lgbm_max_train_rows: 4000000
+  lgbm_params:
+    objective: tweedie
+    tweedie_variance_power: 1.2
+    learning_rate: 0.05
+    num_leaves: 63
+    min_data_in_leaf: 200
+    feature_fraction: 0.8
+    bagging_fraction: 0.8
+    bagging_freq: 1
+    lambda_l2: 1.0
+    verbose: -1
+  lgbm_num_boost_round: 350
+  selection_metric: wape
+  quantiles:
+  - 0.1
+  - 0.5
+  - 0.9
+  bias_flag_threshold: 0.05
+  cold_start_days: 56
+  explain_steps:
+  - 0
+  - 7
+  - 14
+  - 21
+  explain_max_series: 60000
+  warm_start: false
+  warm_start_rounds: 100
+  write_csv: true
+policy:
+  service_level: 0.95
+  review_period_days: 14
+  stockout_risk_threshold: 0.2
+  liquidation_days_of_supply: 365
+optimizer:
+  excess_cost_min_days: 28
+  excess_cost_max_days: 365
+  sender_floor: rop
+  min_transfer_units: 3
+  min_transfer_value: 50.0
+  max_transit_days: 4
+  same_region_only: false
+  cross_region_penalty: 0.5
+  stockout_cost_multiplier: 0.6
+  safety_stock_tier_weight: 0.35
+  obsolescence_multiplier_stagnant: 3.0
+  max_senders_per_receiver: 8
+  max_receivers_per_sender: 8
+  batch_arcs: 10000
+  workers: 0
+  solver_time_limit_s: 60
+  solver_gap: 0.005
+monitoring:
+  wape_degradation: 0.2
+  bias_limit: 0.1
+  coverage_tolerance: 0.1
+  psi_limit: 0.25

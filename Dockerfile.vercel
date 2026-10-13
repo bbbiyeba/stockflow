@@ -1,0 +1,23 @@
+# Hosted demo of the dashboard on Vercel (container image). Read-only: it serves the
+# pre-built snapshot in demo/ and never runs the pipeline. Approvals are off (viewer role).
+FROM python:3.13-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1 \
+    STOCKFLOW_CONFIG=configs/demo.yaml STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
+
+WORKDIR /app
+COPY requirements-app.txt .
+RUN pip install -r requirements-app.txt
+
+COPY app.py config.yaml ./
+COPY configs/demo.yaml configs/demo.yaml
+COPY .streamlit/config.toml .streamlit/config.toml
+COPY src/ src/
+COPY static/ static/
+COPY demo/ demo/
+
+RUN useradd --create-home --uid 10001 stockflow && chown -R stockflow /app
+USER stockflow
+
+# Vercel provides $PORT
+CMD ["sh", "-c", "streamlit run app.py --server.address=0.0.0.0 --server.port=${PORT:-8501} --server.headless=true"]

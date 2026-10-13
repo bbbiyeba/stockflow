@@ -47,3 +47,6 @@ scale-test:         ## 10x network (250 branches, 3,000 SKUs)
 	$(PY) scripts/profile_pipeline.py --config configs/scale_10x.yaml --out reports/profile_10x.csv
 docker:
 	docker build -t stockflow .
+
+demo-bundle:        ## refresh the read-only snapshot served by the hosted demo
+	$(PY) scripts/build_demo_bundle.py
