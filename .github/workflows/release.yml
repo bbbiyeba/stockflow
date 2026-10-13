@@ -1,0 +1,36 @@
+name: release
+
+# Publishes a GitHub release for the version at the top of CHANGELOG.md ("## vX.Y.Z (date)"),
+# tagging the commit that triggered the run. Does nothing if that release already exists.
+on:
+  push:
+    branches: [main]
+    paths: [CHANGELOG.md]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read the version and notes from CHANGELOG.md
+        id: notes
+        run: |
+          version=$(grep -m1 -oE '^## v[0-9]+\.[0-9]+\.[0-9]+' CHANGELOG.md | cut -c4-)
+          test -n "$version" || { echo "no '## vX.Y.Z' heading in CHANGELOG.md"; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          # notes = the first version section, without its heading
+          awk -v v="## $version" 'index($0, v) == 1 {on=1; next} /^## v/ && on {exit} on' CHANGELOG.md > notes.md
+      - name: Create the release if it does not exist
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.notes.outputs.version }}
+        run: |
+          if gh release view "$VERSION" >/dev/null 2>&1; then
+            echo "release $VERSION already exists; nothing to do"
+          else
+            gh release create "$VERSION" --target "$GITHUB_SHA" --title "Stockflow $VERSION" --notes-file notes.md
+          fi
