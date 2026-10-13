@@ -57,16 +57,16 @@ Timings are in [AUDIT.md](AUDIT.md).
 
 ```mermaid
 flowchart LR
-    subgraph Batch pipeline - run_pipeline.py
-        A[ERP / WMS extracts<br/>or data/generate.py] -->|validate: pandera + SQL| B[prep.py<br/>DuckDB ingest into SKU buckets,<br/>dedupe, returns, outliers,<br/>ledger rebuild, stock-out flags]
-        B --> C[forecast.py<br/>baselines, Croston/TSB/SES,<br/>global LightGBM<br/>rolling-origin backtest,<br/>nested model selection,<br/>P10/P50/P90, SHAP]
-        C --> D[policy.py<br/>safety stock, reorder point,<br/>target max, stock-out risk,<br/>excess / stagnant / liquidate]
-        D --> E[optimizer.py<br/>min-cost MILP in SKU batches<br/>+ greedy baseline + sanity checks]
+    subgraph batch["Batch pipeline (run_pipeline.py)"]
+        A["ERP / WMS extracts<br/>or data/generate.py"] -->|"validate: pandera + SQL"| B["prep.py<br/>DuckDB ingest into SKU buckets,<br/>dedupe, returns, outliers,<br/>ledger rebuild, stock-out flags"]
+        B --> C["forecast.py<br/>baselines, Croston/TSB/SES,<br/>global LightGBM<br/>rolling-origin backtest,<br/>nested model selection,<br/>P10/P50/P90, SHAP"]
+        C --> D["policy.py<br/>safety stock, reorder point,<br/>target max, stock-out risk,<br/>excess / stagnant / liquidate"]
+        D --> E["optimizer.py<br/>min-cost MILP in SKU batches<br/>+ greedy baseline + sanity checks"]
     end
-    E --> F[(outputs/ + reports/<br/>run_manifest.json)]
-    F --> G[Streamlit app<br/>read-only]
-    G -->|approve / reject| H[(decisions/<br/>append-only audit log)]
-    F --> I[monitoring.py<br/>accuracy + drift vs baseline]
+    E --> F[("outputs/ + reports/<br/>run_manifest.json")]
+    F --> G["Streamlit app<br/>read-only"]
+    G -->|"approve / reject"| H[("decisions/<br/>append-only audit log")]
+    F --> I["monitoring.py<br/>accuracy + drift vs baseline"]
 ```
 
 1. **Data and cleaning** (`data/generate.py`, `src/prep.py`).
