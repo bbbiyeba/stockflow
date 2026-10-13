@@ -133,7 +133,7 @@ Re-run on `4478beb` with the 10x config. **Not completed: the session stopped it
 | Docstrings on public functions; config documented | **was FAIL → PASS** | An AST scan found 49 public functions or modules without docstrings; now 0. Nine `config.yaml` keys had no comment; all now do |
 | Model card | **was FAIL → PASS** | New [docs/MODEL_CARD.md](docs/MODEL_CARD.md): task, intended and non-intended use, training data, features, held-out metrics, where the model loses, limitations, monitoring, privacy |
 | Clear structure; no dead code, unused files, broken notebooks, debug output | **was PARTIAL → PASS** | vulture found an unused parameter (`_sample_plan(n_series)`) and an unused colour constant; both removed. `make_charts.py` hard-coded this sandbox's browser path and would fail elsewhere; it now falls back to Playwright's default. Remaining vulture hits are used by tests: the `mae` / `mase` reference metrics and `render_page`. No `print` or `breakpoint` in `src/` |
-| Clean history, meaningful commits; final tag / release | PARTIAL | 12 descriptive commits authored by Bryce Biyeba; annotated tag `v1.0.0` pushed with release notes in [CHANGELOG.md](CHANGELOG.md). **To close:** the connected GitHub tools cannot create a Release, so on GitHub open Releases → Draft a new release → choose `v1.0.0` → paste the changelog |
+| Clean history, meaningful commits; final tag / release | PARTIAL | 12 descriptive commits authored by Bryce Biyeba; release notes in [CHANGELOG.md](CHANGELOG.md). An annotated tag `v1.0.0` was created on the final commit, but this environment's git proxy rejects tag pushes (branch pushes work; 5 attempts, "remote end hung up"). **To close:** on GitHub open Releases → Draft a new release → type `v1.0.0` as a new tag on `main` → paste the changelog → Publish. This creates the tag and the release together |
 
 ---
 
@@ -167,6 +167,6 @@ These are listed as limitations in the README, model card and slide 8.
 |---|---|---|
 | 10x re-run on the final code | Generation and cleaning passed; this session's 2-hour background limit stopped the forecast stage | Run `python scripts/profile_pipeline.py --config configs/scale_10x.yaml --stages forecast,policy,optimize` (about 75 min) |
 | Brand colour verified on stryker.com | Site unreachable from this environment | Check #FFB502 against Stryker's brand guide |
-| GitHub Release object | No tool here can create one | Draft a release from tag `v1.0.0` (one click) |
+| `v1.0.0` tag and GitHub Release | This environment's git proxy rejects tag pushes, and no tool here creates releases | GitHub → Releases → Draft a new release → new tag `v1.0.0` on `main` → paste CHANGELOG.md → Publish |
 | Hosted demo publicly reachable, live WebSocket | The demo can only be fetched through Vercel's authenticated bypass; WebSockets can't be tested from here | Open stockflow-six-mu.vercel.app in a private window and click between pages |
 | Docker `apt-get` inside this sandbox | `deb.debian.org` blocked by network policy | Already verified in CI; nothing to do |
