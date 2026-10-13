@@ -10,9 +10,13 @@
 - **Date:** 2026-10-13.
 - **Data:** all figures are from the synthetic network (25 branches, 300 SKUs, 4,889 branch × SKU series).
 
-**Result:** 47 checklist items: 45 PASS, 2 PARTIAL, 0 FAIL.
+**Result:** 47 checklist items: 44 PASS, 3 PARTIAL, 0 FAIL.
 - **Fixed in this pass:** 12 of the PASS items started as FAIL (4) or PARTIAL (8) and were fixed and re-verified.
-- **Still PARTIAL:** the brand-colour check and the GitHub Release object. Both need something this environment can't reach, or a click by a person; see "Open items" at the end.
+- **Still PARTIAL:**
+  - the brand-colour check and the GitHub Release object, which need something this environment can't reach or a click by a person;
+  - the 10x re-run, which was stopped by this session's time limit midway through forecasting, not by a failure.
+
+  See "Open items" at the end.
 
 ---
 
@@ -71,14 +75,27 @@ The Docker check here needed a sandbox-only build copy: this environment's netwo
 
 | Check | Status | Evidence |
 |---|---|---|
-| Every critical and high item fixed and verified | PASS | All 4 critical and 22 high items in AUDIT.md are marked Fixed, and no critical or high item is open. Their fixes are exercised by the tests, the 1x runs and the 10x run below |
+| Every critical and high item fixed and verified | PASS | All 4 critical and 22 high items in AUDIT.md are marked Fixed, and no critical or high item is open. Their fixes are exercised by the tests and the 1x runs; the 10x scale items were verified in the audit's full 10x run, and partly re-verified below |
 | Deferred items have a reason and a next step | **was PARTIAL → PASS** | U9 (chart ARIA) and U13 (dark theme) had a reason but no next step; both now have one. New finding D13 (A-class lumpy series under-forecast by 7.2%) added with a reason and next step. Totals: 68 found, 58 fixed, 10 deferred or accepted |
-| 10x scale test still passes after all changes | PENDING | See below |
+| 10x scale test still passes after all changes | PARTIAL | See below |
 | No secrets in repo or history; `.env.example` present | PASS | `git log --all -p` scanned for key, token, password, private-key and `ghp_` / `sk-` patterns: only documentation mentions. `.env.example` is tracked; `.env` and `.streamlit/secrets.toml` are git-ignored |
 
 **10x scale test** (250 branches, 3,000 SKUs, `scripts/profile_pipeline.py --config configs/scale_10x.yaml`):
 
-Running at the time of this commit (started 07:00 on `4478beb`); the result is added here when it completes.
+Re-run on `4478beb` with the 10x config. **Not completed: the session stopped it, it did not fail.**
+
+| Stage | This review | Last full 10x run (AUDIT.md) |
+|---|---|---|
+| generate | ok, 472 s, peak 6.5 GB | 384 s, 6.5 GB |
+| prep | ok, 3,103 s, peak 5.8 GB | 2,324 s, 5.9 GB |
+| forecast | stopped about 44 min in by this session's 2-hour limit on background jobs; it was running normally (3.4 GB memory, no errors) | 5,827 s, 9.5 GB before the SHAP cap |
+| policy, optimize | not reached | 30 s; 785 s, 163 parallel batches, all optimal |
+
+- **Speed:** generation and cleaning ran 23–33% slower than before. This pass did not change their code; the likely cause is other checks running at the same time and disk speed varying between sessions.
+- **What changed since the last full 10x run:**
+  - the loss report and the new impact rows, both cheap aggregations;
+  - the sensitivity stage, which the profiler does not run.
+- **To close:** run `python scripts/profile_pipeline.py --config configs/scale_10x.yaml --stages forecast,policy,optimize`, about 75 minutes on a 4-core, 15 GB machine.
 
 ---
 
@@ -116,7 +133,7 @@ Running at the time of this commit (started 07:00 on `4478beb`); the result is a
 | Docstrings on public functions; config documented | **was FAIL → PASS** | An AST scan found 49 public functions or modules without docstrings; now 0. Nine `config.yaml` keys had no comment; all now do |
 | Model card | **was FAIL → PASS** | New [docs/MODEL_CARD.md](docs/MODEL_CARD.md): task, intended and non-intended use, training data, features, held-out metrics, where the model loses, limitations, monitoring, privacy |
 | Clear structure; no dead code, unused files, broken notebooks, debug output | **was PARTIAL → PASS** | vulture found an unused parameter (`_sample_plan(n_series)`) and an unused colour constant; both removed. `make_charts.py` hard-coded this sandbox's browser path and would fail elsewhere; it now falls back to Playwright's default. Remaining vulture hits are used by tests: the `mae` / `mase` reference metrics and `render_page`. No `print` or `breakpoint` in `src/` |
-| Clean history, meaningful commits; final tag / release | PARTIAL | 11 descriptive commits authored by Bryce Biyeba; annotated tag `v1.0.0` pushed with release notes in [CHANGELOG.md](CHANGELOG.md). **To close:** the connected GitHub tools cannot create a Release, so on GitHub open Releases → Draft a new release → choose `v1.0.0` → paste the changelog |
+| Clean history, meaningful commits; final tag / release | PARTIAL | 12 descriptive commits authored by Bryce Biyeba; annotated tag `v1.0.0` pushed with release notes in [CHANGELOG.md](CHANGELOG.md). **To close:** the connected GitHub tools cannot create a Release, so on GitHub open Releases → Draft a new release → choose `v1.0.0` → paste the changelog |
 
 ---
 
@@ -144,10 +161,11 @@ These are listed as limitations in the README, model card and slide 8.
 
 ---
 
-## Open items (the 2 PARTIALs plus 2 environment limits)
+## Open items (the 3 PARTIALs plus 2 environment limits)
 
 | Item | Why | What closes it |
 |---|---|---|
+| 10x re-run on the final code | Generation and cleaning passed; this session's 2-hour background limit stopped the forecast stage | Run `python scripts/profile_pipeline.py --config configs/scale_10x.yaml --stages forecast,policy,optimize` (about 75 min) |
 | Brand colour verified on stryker.com | Site unreachable from this environment | Check #FFB502 against Stryker's brand guide |
 | GitHub Release object | No tool here can create one | Draft a release from tag `v1.0.0` (one click) |
 | Hosted demo publicly reachable, live WebSocket | The demo can only be fetched through Vercel's authenticated bypass; WebSockets can't be tested from here | Open stockflow-six-mu.vercel.app in a private window and click between pages |
