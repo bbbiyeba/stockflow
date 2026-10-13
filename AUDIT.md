@@ -25,15 +25,82 @@ cheap, otherwise deferred with a reason.
 
 | | critical | high | medium | low | total |
 |---|---|---|---|---|---|
-| Found | 4 | 21 | 27 | 7 | 59 |
-| Fixed | 4 | 21 | 22 | 4 | 51 |
-| Deferred / accepted | 0 | 0 | 5 | 3 | 8 |
+| Found | 4 | 22 | 33 | 8 | 67 |
+| Fixed | 4 | 22 | 29 | 3 | 58 |
+| Deferred / accepted | 0 | 0 | 4 | 5 | 9 |
 
 ---
 
 ## Before / after summary
 
-{{SUMMARY}}
+All "after" numbers are from the final code; "before" is v1 (`f0ab18e`). Forecast metrics are
+compared on **identical data**: v1 was re-run from a worktree on the same generated extract.
+Machine: 4 vCPU, 15 GB RAM.
+
+**Pipeline runtime and peak memory**
+
+| Stage | 1x before | 1x after | 10x before | 10x after |
+|---|---|---|---|---|
+| generate | 17.0 s / 1.1 GB | 9.4 s / 0.6 GB | crash: 25-city limit; when patched, `MemoryError` (4 GB alloc) at 8.4 GB after 37 s | 384 s / 6.5 GB |
+| prep | 26.3 s / 2.0 GB | 21.3 s / 1.1 GB | not reachable (> 40 GB of dense matrices) | 2,324 s / 5.9 GB |
+| forecast | 257.7 s / 2.1 GB | 242.8 s / 2.2 GB | not reachable (263M training rows) | 5,827 s / 9.5 GB; ≈ 3,800 s projected with the SHAP cap (P15) |
+| policy | 1.4 s / 0.2 GB | 1.4 s / 0.3 GB | n/a | 30 s / 3.9 GB |
+| optimize | 16.6 s / 0.4 GB | 15.2 s / 0.5 GB | n/a | 785 s / 2.0 GB (163 parallel batches, all optimal) |
+| **total** | **319 s** | **290 s** | **fails** | **≈ 2.6 h measured (≈ 2.0 h with the SHAP cap)** |
+
+10x = 250 branches × 3,000 SKUs = 487,747 series × 1,096 days (535M series-days).
+The 10x prep and forecast stages shared the CPU with other work during measurement, so
+those two figures are upper bounds.
+
+**Forecast accuracy** (held-out fold 4, uncensored days, same data)
+
+| Metric | Before | After |
+|---|---|---|
+| Accuracy figure reported | 50.0% WAPE, in-sample selection over 4 folds (optimistic by design) | 49.8% WAPE, selection on folds 1–3, scored on untouched fold 4 |
+| LightGBM WAPE | 49.9% | 49.7% |
+| LightGBM MASE | 0.758 | 0.723 |
+| Bias (selected) | −0.7% | −0.8% |
+| 28-day-total WAPE | 12.8% | 12.9% |
+| P10–P90 coverage (target 80%) | 83.8% | 83.9% |
+| Seasonal-naive WAPE | 74.9% | 74.9% |
+| 10x held-out WAPE (LightGBM on ≤ 4M sampled rows) | n/a | 50.8% |
+
+The leakage fix (D1) and the nested evaluation (D2) barely move accuracy on this data.
+The look-ahead touched < 1% of days, and LightGBM wins almost every segment either way.
+The honest number is now what gets reported.
+
+**Optimiser** (1x)
+
+| Metric | Before | After |
+|---|---|---|
+| Net savings | $207.7k | $203.1k |
+| Greedy baseline | n/a | $192.7k |
+
+The 2.2% lower savings are mainly arc pruning (0.8% when measured in isolation), the
+price of making 10x solvable. At 10x the MILP saves $42.8M vs $40.6M for greedy, with zero
+constraint violations.
+
+**Quality gates**
+
+| Gate | Before | After |
+|---|---|---|
+| Tests | 33 | 62 (unit + end-to-end + dashboard render) |
+| Coverage | 39% | 94% |
+| ruff | 86 issues | 0 |
+| mypy | 34 errors (another 71 hidden by the local tool) | 0 |
+| bandit | 4 low | 0 |
+| pip-audit | 0 known vulnerabilities | 0 |
+| Secrets in git history | none | none |
+| CI | none | green: <https://github.com/bbbiyeba/stockflow/actions> |
+
+**Screenshots after the UI pass** (laptop 1366 px; phone 390 px):
+
+| Page | Laptop | Phone |
+|---|---|---|
+| Transfer recommendations | ![](docs/screenshots/transfers.png) | ![](docs/screenshots/mobile_transfers.png) |
+| Inventory health | ![](docs/screenshots/health.png) | ![](docs/screenshots/mobile_health.png) |
+| Forecast explorer | ![](docs/screenshots/forecast.png) | ![](docs/screenshots/mobile_forecast.png) |
+| Forecast accuracy | ![](docs/screenshots/accuracy.png) | ![](docs/screenshots/mobile_accuracy.png) |
 
 ---
 
@@ -115,6 +182,8 @@ All of these are covered by `tests/test_integration.py`.
 | P10 | The dashboard loaded the whole forecast CSV and cached it without a config key. | `app.py:41` | medium | **Fixed**: per-series Parquet reads; every cache keyed by config file. A test caught the stale-cache bug. |
 | P11 | A 13.7M-row `forecasts.csv` at 10x. | `src/forecast.py:268` | medium | **Fixed**: Parquet always; CSV optional (`forecast.write_csv`). |
 | P12 | (Found in the 10x run) DuckDB `ORDER BY` during ingest spilled 20 GB of temp data. | `src/prep.py` (refactor) | medium | **Fixed**: no global sort (rows are keyed later). |
+| P15 | (Found in the 10x run) The final forecast computed SHAP explanations for all ~490k series. TreeSHAP costs far more than prediction, so explaining dominated the final step, which took ~47 min of the 97-min forecast stage. | `src/forecast.py` final loop | high | **Fixed**: `forecast.explain_max_series` (60k) explains A-class series first, then a random sample; all series at 1x; the dashboard says when a series was not explained. Measured on a real 10x bucket of 29,924 series: 160 s with every series explained vs 40 s capped (25 s with no explanations), about 34 min saved across 17 buckets. |
+| P16 | (Found in the 10x run) Even after pruning, the optimiser had 1.7M arcs: 86 sequential batches on one core, still running after 35 min. | `src/optimizer.py` `solve_decomposed` | high | **Fixed**: batches made independent by splitting each branch's spare capacity up front, pro rata to what each batch could send there (no split where capacity is ample), then solved in parallel worker processes; 10k-arc batches. 10x: 163 batches, all optimal, 785 s and 2.0 GB peak, net savings $42.8M vs $40.6M greedy, zero sanity-check violations. Pruning sweep: 8/8 lanes keeps 99.2% of unpruned savings at 1x (unpruned is 9.4M arcs at 10x). |
 | P13 | Buckets are cleaned and forecast sequentially although they are independent. | `src/prep.py`, `src/forecast.py` | medium | **Deferred**: one ~4 GB worker fits this 15 GB / 4-core box; a `ProcessPoolExecutor` over buckets is the next step on a larger runner. |
 | P14 | Polars not adopted. | n/a | low | **Accepted**: DuckDB handles the out-of-core aggregation; the rest is NumPy on bounded buckets. |
 
@@ -129,12 +198,12 @@ decision log), so the two scale independently.
 | D2 | **Optimistic evaluation:** the best model per segment was picked on the same folds it was then scored on. | `src/forecast.py:203` | high | **Fixed**: nested selection, choosing on folds 1–3 and reporting on untouched fold 4 (`holdout_*`). Production re-selects on all folds. |
 | D3 | No cold-start handling: a new SKU or branch got empty features, zero stats forecasts and zero safety stock. | `src/forecast.py` | high | **Fixed**: series with < 56 days of history get the SKU's peer rate × the branch's relative volume × the weekday profile (category median for brand-new SKUs) and a peer-based error scale; flagged in the UI. Unit-tested. |
 | D4 | No sensitivity analysis. | n/a | high | **Fixed**: `scripts/sensitivity.py`, covering service level, transfer cost, forecast error and level; results are in the README and the dashboard. |
-| D5 | Bias only reported overall. | `src/forecast.py:180` | medium | **Fixed**: `reports/bias_check.csv` by ABC class, branch, category and pattern, flagging \|bias\| > 5%. Result: {{BIAS}} |
-| D6 | Baseline comparison: the selected model must beat seasonal naive per segment. | `src/forecast.py:203` | medium | **Fixed** (report): {{NAIVE}} |
-| D7 | Prediction intervals over-cover: P10–P90 held {{COVERAGE}} of actuals vs the 80% target. | `src/forecast.py:228` | medium | **Deferred**: conservative, and safety stock uses the weekly error σ, not these quantiles. A per-segment scaling factor fitted on earlier folds is the fix. |
+| D5 | Bias only reported overall. | `src/forecast.py:180` | medium | **Fixed**: `reports/bias_check.csv` by ABC class, branch, category and pattern, flagging \|bias\| > 5%. Result: on the held-out fold no ABC class, branch (range −4.3% to +2.0%), category or demand pattern exceeds ±5%; the only group above it is the "no demand" pattern with 5 units of actuals, now marked too small to judge. |
+| D6 | Baseline comparison: the selected model must beat seasonal naive per segment. | `src/forecast.py:203` | medium | **Fixed** (report): the selected model beats seasonal naive on the held-out fold in 12 of 13 segments; the 13th (C · no demand) is a tie, since both forecast zero. |
+| D7 | Prediction intervals over-cover: P10–P90 held 83.9% of actuals vs the 80% target. | `src/forecast.py:228` | medium | **Deferred**: conservative, and safety stock uses the weekly error σ, not these quantiles. A per-segment scaling factor fitted on earlier folds is the fix. |
 | D8 | Explainability was only a gain-importance file. | `src/forecast.py:299` | medium | **Fixed**: per-series SHAP drivers (LightGBM `pred_contrib`, averaged over the horizon) shown in plain language, plus a plain-language reason on every transfer. |
 | D9 | Stagnant stock of a SKU with no demand anywhere was treated like movable excess. | `src/policy.py:118` | medium | **Fixed**: `liquidation_candidate` when the whole network holds > 365 days of supply; shown separately as a liquidation decision. |
-| D10 | Optimiser sanity rules were only checked in tests. | `src/optimizer.py:296` | medium | **Fixed**: `check_plan()` blocks publishing on any violation (conservation, sender ≥ safety stock and floor, receiver ≤ target, capacity, minimum quantity, circular lanes); results go to `reports/optimizer_checks.csv`. Per-row savings ≤ 0: {{NONPOS}}. |
+| D10 | Optimiser sanity rules were only checked in tests. | `src/optimizer.py:296` | medium | **Fixed**: `check_plan()` blocks publishing on any violation (conservation, sender ≥ safety stock and floor, receiver ≤ target, capacity, minimum quantity, circular lanes); results go to `reports/optimizer_checks.csv`. Per-row savings ≤ 0: 0 of 883 at 1x; 2 of 130k at 10x, an artefact of allocating shared receiver benefit across rows; the plan as a whole is net positive.. |
 | D11 | Outlier thresholds use each series' whole-history 99th percentile (mild look-ahead). | `src/prep.py:115` | medium | **Deferred**: affects < 0.03% of rows; a rolling quantile would remove it. |
 | D12 | ABC class comes from the last 365 days, which includes backtest periods. | `data/generate.py:362` | low | **Accepted**: used for segmentation and reporting only, never as a model feature. |
 
@@ -150,9 +219,10 @@ decision log), so the two scale independently.
 
 | ID | Finding | Location (v1) | Sev. | Status |
 |---|---|---|---|---|
-| R1 | Test coverage 39% (`generate.py` and `forecast.py` 0%); no integration test. | `tests/` | high | **Fixed**: {{TESTS}} tests at {{COVERAGE_PCT}} coverage, including an end-to-end run on a tiny multi-chunk, multi-bucket network, malformed-input rejection, monitoring, and a render of every dashboard page and its empty state. |
+| R1 | Test coverage 39% (`generate.py` and `forecast.py` 0%); no integration test. | `tests/` | high | **Fixed**: 62 tests at 94% coverage, including an end-to-end run on a tiny multi-chunk, multi-bucket network, malformed-input rejection, monitoring, and a render of every dashboard page and its empty state. |
 | R2 | No data validation at pipeline boundaries. | all stages | high | **Fixed** (see S3). |
-| R3 | No CI. | n/a | high | **Fixed**: GitHub Actions running black, ruff, mypy, pytest with coverage gate ≥ 85%, bandit and pip-audit on every push. {{CI}} |
+| R3 | No CI. | n/a | high | **Fixed**: GitHub Actions running black, ruff, mypy, pytest with coverage gate ≥ 85%, bandit and pip-audit on every push. The first CI run failed and exposed R8; every run since is green. |
+| R9 | The first parallel optimiser used `fork`; forking after the solver's thread pools have started deadlocked the children (the new parallel test hung). | `src/optimizer.py` | medium | **Fixed**: `spawn` workers that receive the problem once through a pool initializer; covered by `test_parallel_batches_respect_all_constraints`. |
 | R8 | (Found by the new CI) the local `mypy` was a standalone tool with no pandas installed, so pandas types were `Any` and 71 type errors were invisible locally. | `Makefile`, `.pre-commit-config.yaml` | medium | **Fixed**: errors fixed (including unguarded `None` from DuckDB fetches and an empty SKU picker); `make typecheck` and the pre-commit hook now run `python -m mypy` with the project interpreter. |
 | R4 | `print` logging, no run ids. | all modules | medium | **Fixed**: `logging` with a run id on every line; `STOCKFLOW_LOG_FORMAT=json` for structured logs. |
 | R5 | Config, versions and seeds were not saved with outputs. | `run_pipeline.py` | medium | **Fixed**: `outputs/run_manifest.json` holds run id, git commit, full config and its hash, seed, package versions, per-stage timings and status, and SHA-256 of outputs. |

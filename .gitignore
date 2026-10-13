@@ -19,3 +19,4 @@ htmlcov/
 .mypy_cache/
 .ruff_cache/
 .pytest_cache/
+decisions_10x/

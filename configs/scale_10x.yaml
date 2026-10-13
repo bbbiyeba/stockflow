@@ -5,6 +5,7 @@ paths:
   processed_dir: data_10x/processed
   output_dir: outputs_10x
   reports_dir: reports_10x
+  decisions_dir: decisions_10x
 data:
   seed: 42
   n_branches: 250
@@ -59,6 +60,7 @@ forecast:
   - 0.9
   bias_flag_threshold: 0.05
   cold_start_days: 56
+  explain_max_series: 60000
   explain_steps:
   - 0
   - 7
@@ -86,6 +88,12 @@ optimizer:
   obsolescence_multiplier_stagnant: 3.0
   max_senders_per_receiver: 8
   max_receivers_per_sender: 8
-  batch_arcs: 20000
+  batch_arcs: 10000
+  workers: 0
   solver_time_limit_s: 60
   solver_gap: 0.005
+monitoring:
+  wape_degradation: 0.2
+  bias_limit: 0.1
+  coverage_tolerance: 0.1
+  psi_limit: 0.25

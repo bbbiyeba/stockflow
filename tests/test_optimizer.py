@@ -145,3 +145,39 @@ def test_same_region_only_is_enforced():
     plan, _ = solve_milp(prob, cfg)
     reg = branches.set_index("branch_id")["region"]
     assert (plan["branch_id_s"].map(reg) == plan["branch_id_r"].map(reg)).all()
+
+
+def test_capacity_split_never_exceeds_free_capacity():
+    from src.optimizer import allocate_capacity
+
+    cfg = load_config()
+    pol, branches, costs = _network(seed=5)
+    prob = build_problem(pol, branches, costs, cfg)
+    skus = sorted(prob.pairs["sku_id"].unique())
+    batches = [skus[: len(skus) // 2], skus[len(skus) // 2 :]]
+    # scarce capacity: every branch can take only a few units
+    prob.free_capacity[:] = 5.0
+    caps = allocate_capacity(prob, batches)
+    for b in prob.free_capacity.index:
+        assert sum(c.get(b, 0) for c in caps) <= 5.0 + 1e-9
+    # ample capacity: each batch gets its full need, i.e. the split never binds
+    prob.free_capacity[:] = 1e9
+    caps = allocate_capacity(prob, batches)
+    room = prob.nodes.set_index("node")["room"]
+    for i, skus_i in enumerate(batches):
+        sub = prob.pairs[prob.pairs["sku_id"].isin(skus_i)].drop_duplicates("node_r")
+        need = sub.assign(room=room.loc[sub["node_r"]].to_numpy()).groupby("branch_id_r")["room"].sum()
+        for b, v in need.items():
+            assert caps[i][b] == pytest.approx(v)
+
+
+def test_parallel_batches_respect_all_constraints():
+    cfg = load_config()
+    cfg["optimizer"].update(batch_arcs=5, workers=2)
+    pol, branches, costs = _network(seed=7)
+    from src.optimizer import check_plan, solve_decomposed
+
+    prob = build_problem(pol, branches, costs, cfg)
+    plan, info = solve_decomposed(prob, cfg)
+    assert len(info) > 1
+    assert not any(check_plan(prob, plan).values())

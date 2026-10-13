@@ -66,6 +66,7 @@ forecast:
   bias_flag_threshold: 0.05      # |bias| above this is flagged in reports/bias_check.csv
   cold_start_days: 56            # series with less history get the peer-based cold-start forecast
   explain_steps: [0, 7, 14, 21]  # horizon days averaged for SHAP explanations
+  explain_max_series: 60000      # SHAP is costly: above this, explain A-class first, then a random sample
   warm_start: false              # continue training the previous model (hash-verified) instead of refitting
   warm_start_rounds: 100
   write_csv: true                # also write outputs/forecasts.csv (Parquet is always written)
@@ -93,7 +94,8 @@ optimizer:
   obsolescence_multiplier_stagnant: 3.0  # stagnant excess carries this multiple of the SKU's obsolescence risk
   max_senders_per_receiver: 8    # arc pruning: keep each receiver's k cheapest senders ...
   max_receivers_per_sender: 8    # ... and each sender's k cheapest receivers
-  batch_arcs: 20000              # SKUs are solved in batches of about this many arcs
+  batch_arcs: 10000              # SKUs are solved in batches of about this many arcs
+  workers: 0                     # parallel batch solves (0 = all cores); capacity is split up front
   solver_time_limit_s: 60        # per batch; best feasible solution is kept, greedy if none
   solver_gap: 0.005
 

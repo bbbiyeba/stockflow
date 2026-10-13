@@ -453,7 +453,7 @@ def page_transfers(user: access.User) -> None:
         "transfer_id": st.column_config.TextColumn("Transfer ID"),
     }
     if user.role == "approver":
-        page.insert(3, "Decide", "")
+        page.insert(3, "Decide", "Pending")
         page.insert(4, "Note", "")
         edited = st.data_editor(
             page,
@@ -796,6 +796,11 @@ def page_forecast(user: access.User) -> None:
     ex = d["explain"]
     if ex is not None:
         e = ex[(ex["branch_id"] == b) & (ex["sku_id"] == s)].sort_values("rank")
+        if e.empty and r["model"] != "cold_start":
+            note(
+                "No driver breakdown for this series: at network scale only a sample of series is explained "
+                "(A-class first) to keep the nightly run fast."
+            )
         if not e.empty and r["model"] != "cold_start":
             st.markdown("## What drives this forecast")
             lines = []
@@ -944,7 +949,10 @@ def page_accuracy(user: access.User) -> None:
     flagged = bias[bias["flag"] == "check"]
     dims = {"abc_class": "ABC class", "branch_id": "Branch", "category": "Category", "pattern": "Demand pattern"}
     if flagged.empty:
-        st.success("No ABC class, branch, category or demand pattern is biased by more than 5% on the held-out fold.")
+        st.success(
+            "No ABC class, branch, category or demand pattern is biased by more than 5% on the held-out fold"
+            " (groups under 0.5% of volume are too small to judge and are not flagged)."
+        )
     else:
         note(f"{len(flagged)} group(s) are biased by more than 5% on the held-out fold:")
         st.dataframe(

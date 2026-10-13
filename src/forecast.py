@@ -176,9 +176,20 @@ def fit_lightgbm(
 
 
 def predict_lightgbm(
-    model: lgb.Booster, net: Network, b: Bucket, origin: int, horizon: int, explain_steps: tuple[int, ...] = ()
+    model: lgb.Booster,
+    net: Network,
+    b: Bucket,
+    origin: int,
+    horizon: int,
+    explain_steps: tuple[int, ...] = (),
+    explain_rows: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray | None]:
-    """Recursive multi-step forecast; optionally average SHAP contributions over ``explain_steps``."""
+    """Recursive multi-step forecast; optionally average SHAP contributions over ``explain_steps``.
+
+    SHAP (TreeSHAP) costs far more than prediction, so it is computed only for ``explain_rows``
+    (default: all rows); unexplained rows come back as NaN.
+    """
+    rows = np.arange(b.n) if explain_rows is None else explain_rows
     Yw = np.full((b.n, origin + horizon), np.nan)
     Yw[:, :origin] = b.Y[:, :origin]
     contrib = None
@@ -186,8 +197,9 @@ def predict_lightgbm(
         t = origin + h
         X = feature_frame(Yw, np.array([t]), b.static, net.cal, b.discount, b.days_into)[feature_names()]
         Yw[:, t] = np.clip(np.asarray(model.predict(X)), 0, None)
-        if h in explain_steps:
-            c = np.asarray(model.predict(X, pred_contrib=True))  # SHAP values in raw (log-link) space
+        if h in explain_steps and len(rows):
+            c = np.full((b.n, X.shape[1] + 1), np.nan)
+            c[rows] = np.asarray(model.predict(X.iloc[rows], pred_contrib=True))  # SHAP in log-link space
             contrib = c if contrib is None else contrib + c
     if contrib is not None:
         contrib /= len(explain_steps)
@@ -202,6 +214,7 @@ def forecast_bucket(
     booster: lgb.Booster | None,
     models: list[str],
     explain_steps: tuple[int, ...] = (),
+    explain_rows: np.ndarray | None = None,
 ) -> tuple[dict[str, np.ndarray], np.ndarray | None]:
     """Run ``models`` for one bucket from ``origin`` (first forecast day index)."""
     fc = cfg["forecast"]
@@ -218,7 +231,7 @@ def forecast_bucket(
         elif m in ("croston_sba", "tsb", "ses"):
             out[m] = forecast_statistical(hist, H, last_dow, m)
         elif m == "lightgbm" and booster is not None:
-            out[m], contrib = predict_lightgbm(booster, net, b, origin, H, explain_steps)
+            out[m], contrib = predict_lightgbm(booster, net, b, origin, H, explain_steps, explain_rows)
     return {k: v.astype(np.float32) for k, v in out.items()}, contrib
 
 
@@ -421,7 +434,11 @@ def run(config_path: str | None = None) -> None:
         a = aggregate_metrics(picked, [dim]).rename(columns={dim: "group"}).assign(dimension=dim)
         bias_rows.append(a[["dimension", "group", "actual_units", "bias", "wape"]])
     bias = pd.concat(bias_rows, ignore_index=True)
-    bias["flag"] = np.where(bias["bias"].abs() > fc.get("bias_flag_threshold", 0.05), "check", "ok")
+    # bias on a sliver of volume is noise: groups under 0.5% of units are reported but not flagged
+    share = bias["actual_units"] / bias.groupby("dimension")["actual_units"].transform("sum")
+    bias["flag"] = np.select(
+        [share < 0.005, bias["bias"].abs() > fc.get("bias_flag_threshold", 0.05)], ["too_small", "check"], "ok"
+    )
     bias.to_csv(rep / "bias_check.csv", index=False)
     sel_row = held_overall.set_index("model").loc["selected"]
     log.info(
@@ -502,12 +519,15 @@ def run(config_path: str | None = None) -> None:
     )
     final_pattern = np.empty(net.n, dtype=object)
     point = np.zeros((net.n, H), dtype=np.float64)
-    contrib_all = np.zeros((net.n, len(feature_names()) + 1), dtype=np.float32)
+    contrib_all = np.full((net.n, len(feature_names()) + 1), np.nan, dtype=np.float32)
     needed = sorted(set(choice.values()) | {"lightgbm"})
     explain_steps = tuple(int(x) for x in fc.get("explain_steps", [0, 7, 14, 21]))
+    explain = explain_selection(abc_all, int(fc.get("explain_max_series", 60_000)), rng)
     for k in net.buckets:
         b = get(k)
-        preds, contrib = forecast_bucket(net, b, origin, cfg, booster, needed, explain_steps)
+        preds, contrib = forecast_bucket(
+            net, b, origin, cfg, booster, needed, explain_steps, np.nonzero(explain[b.rows])[0]
+        )
         pat = demand_pattern(b.Y[:, origin - 365 : origin])
         seg = np.char.add(np.char.add(abc_all[b.rows].astype("U1"), "|"), pat.astype("U12"))
         final_pattern[b.rows] = pat
@@ -599,22 +619,34 @@ def _network_weekday_index(net: Network, get: Any) -> np.ndarray:
     return tot / tot.mean() if tot.sum() > 0 else np.ones(7)
 
 
+def explain_selection(abc: np.ndarray, cap: int, rng: np.random.Generator) -> np.ndarray:
+    """Which series get SHAP explanations: all if they fit under ``cap``, else A-class first, then a sample."""
+    n = len(abc)
+    if n <= cap:
+        return np.ones(n, dtype=bool)
+    order = np.lexsort((rng.random(n), abc != "A"))  # A-class first, random within class
+    mask = np.zeros(n, dtype=bool)
+    mask[order[:cap]] = True
+    return mask
+
+
 def _write_explanations(
     paths: Paths, s: pd.DataFrame, contrib: np.ndarray, model_used: np.ndarray, top: int = 5
 ) -> None:
     """Top contributing features per series (mean SHAP over the explained horizon days)."""
     names = np.array(feature_names())
-    c = contrib[:, :-1]
+    keep = ~np.isnan(contrib[:, 0])  # series that were explained
+    c = contrib[keep, :-1]
     order = np.argsort(-np.abs(c), axis=1)[:, :top]
-    n = len(s)
+    n = int(keep.sum())
     df = pd.DataFrame(
         {
-            "branch_id": np.repeat(s["branch_id"].astype(str).to_numpy(), top),
-            "sku_id": np.repeat(s["sku_id"].astype(str).to_numpy(), top),
+            "branch_id": np.repeat(s["branch_id"].astype(str).to_numpy()[keep], top),
+            "sku_id": np.repeat(s["sku_id"].astype(str).to_numpy()[keep], top),
             "rank": np.tile(np.arange(1, top + 1), n),
             "feature": names[order].ravel(),
             "shap_log": np.take_along_axis(c, order, axis=1).ravel(),
-            "model_used": np.repeat(model_used.astype(str), top),
+            "model_used": np.repeat(model_used.astype(str)[keep], top),
         }
     )
     df.to_parquet(paths.output / "forecast_explanations.parquet", index=False)

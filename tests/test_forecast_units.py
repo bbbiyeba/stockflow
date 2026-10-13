@@ -43,3 +43,13 @@ def test_sample_plan_caps_rows():
     assert _sample_plan(1000, 540, 4000, 10_000_000) == (1.0, 540)
     share, days = _sample_plan(30_000, 540, 490_000, 4_000_000)
     assert 490_000 * share * days <= 4_000_000 * 1.01 and days >= 56
+
+
+def test_explain_selection_prefers_a_class_under_cap():
+    from src.forecast import explain_selection
+
+    abc = np.array(["C", "A", "B", "A", "C", "A"])
+    rng = np.random.default_rng(0)
+    assert explain_selection(abc, 10, rng).all()
+    m = explain_selection(abc, 3, rng)
+    assert m.sum() == 3 and m[abc == "A"].all()

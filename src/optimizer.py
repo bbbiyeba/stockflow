@@ -31,6 +31,8 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import multiprocessing as mp
+import os
 import sys
 import time
 from collections.abc import Hashable, Mapping
@@ -297,8 +299,59 @@ def solve_greedy(
     return plan[plan["qty"] > 0]
 
 
+_SHARED: dict[str, Any] = {}  # per-process copy of the problem (set directly, or by the pool initializer)
+
+
+def _init_worker(prob: Problem, cfg: dict[str, Any]) -> None:
+    _SHARED.update(prob=prob, cfg=cfg)
+
+
+def _solve_batch(job: tuple[int, list[str], dict[Hashable, float]]) -> tuple[pd.DataFrame, dict[str, Any]]:
+    """Solve one SKU batch with its capacity allocation; greedy fallback on solver failure."""
+    bi, skus, cap = job
+    prob, cfg = _SHARED["prob"], _SHARED["cfg"]
+    sub = prob.pairs[prob.pairs["sku_id"].isin(skus)]
+    try:
+        plan, info = solve_milp(prob, cfg, sub, cap)
+        method = "milp"
+        if not info.get("has_solution", True) or info["status"] in (
+            "Infeasible",
+            "Unbounded",
+            "NotSolved",
+            "Undefined",
+            "NumericalError",
+        ):
+            raise RuntimeError(info["status"])
+    except Exception as e:  # noqa: BLE001 - any solver failure falls back to greedy
+        plan = solve_greedy(prob, sub, cap)
+        info, method = {"status": f"fallback: {e}"[:80], "arcs": len(sub)}, "greedy_fallback"
+    return plan, {"batch": bi + 1, "skus": len(skus), "method": method, **info}
+
+
+def allocate_capacity(prob: Problem, batches: list[list[str]]) -> list[dict[Hashable, float]]:
+    """Split each branch's free capacity across batches in proportion to the room they could fill.
+
+    Where a branch can absorb everything every batch could send it, each batch gets its full need,
+    so the split never binds; otherwise capacity is shared pro rata. This makes batches independent.
+    """
+    d = prob.nodes.set_index("node")
+    rec = prob.pairs.drop_duplicates("node_r")[["node_r", "sku_id", "branch_id_r"]]
+    rec = rec.assign(room=d.loc[rec["node_r"], "room"].to_numpy())
+    sku_batch = {s: i for i, skus in enumerate(batches) for s in skus}
+    rec["batch"] = rec["sku_id"].map(sku_batch)
+    need = rec.groupby(["batch", "branch_id_r"])["room"].sum().unstack(fill_value=0)
+    free = prob.free_capacity.reindex(need.columns).fillna(0.0).to_numpy(dtype=float)
+    n = need.to_numpy(dtype=float)
+    total = n.sum(axis=0)
+    binding = total > free  # branches that cannot absorb every batch's full need
+    alloc = n.copy()
+    alloc[:, binding] = n[:, binding] / total[binding] * free[binding]
+    out = pd.DataFrame(alloc, index=need.index, columns=need.columns)
+    return [out.loc[i].to_dict() if i in out.index else {} for i in range(len(batches))]
+
+
 def solve_decomposed(prob: Problem, cfg: dict[str, Any]) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Solve SKU batches sequentially with shared capacity; greedy fallback per batch."""
+    """Solve SKU batches in parallel, each with its own share of branch capacity."""
     oc = cfg["optimizer"]
     P = prob.pairs
     if P.empty:
@@ -311,9 +364,11 @@ def solve_decomposed(prob: Problem, cfg: dict[str, Any]) -> tuple[pd.DataFrame, 
     arcs = P.groupby("sku_id").size().reindex(sku_value.index)
     order = sku_value.sort_values(ascending=False).index
     batch_arcs = int(oc.get("batch_arcs", 20_000))
-    batches, cur, n = [], [], 0
+    batches: list[list[str]] = []
+    cur: list[str] = []
+    n = 0
     for sku in order:
-        cur.append(sku)
+        cur.append(str(sku))
         n += int(arcs[sku])
         if n >= batch_arcs:
             batches.append(cur)
@@ -321,35 +376,28 @@ def solve_decomposed(prob: Problem, cfg: dict[str, Any]) -> tuple[pd.DataFrame, 
     if cur:
         batches.append(cur)
 
-    cap = prob.free_capacity.to_dict()
-    plans, infos = [], []
-    for bi, skus in enumerate(batches):
-        sub = P[P["sku_id"].isin(skus)]
+    caps = allocate_capacity(prob, batches)
+    jobs = [(i, skus, caps[i]) for i, skus in enumerate(batches)]
+    workers = int(oc.get("workers", 0)) or (os.cpu_count() or 1)
+    workers = max(1, min(workers, len(jobs)))
+    if workers == 1:
+        _init_worker(prob, cfg)
         try:
-            plan, info = solve_milp(prob, cfg, sub, cap)
-            method = "milp"
-            if not info.get("has_solution", True) or info["status"] in (
-                "Infeasible",
-                "Unbounded",
-                "NotSolved",
-                "Undefined",
-                "NumericalError",
-            ):
-                raise RuntimeError(info["status"])
-        except Exception as e:  # noqa: BLE001 - any solver failure falls back to greedy
-            plan, info, method = (
-                solve_greedy(prob, sub, cap),
-                {"status": f"fallback: {e}"[:80], "arcs": len(sub)},
-                "greedy_fallback",
-            )
-        for b, q in plan.groupby("branch_id_r")["qty"].sum().items():
-            cap[b] = cap.get(b, 0) - q
-        plans.append(plan)
-        infos.append({"batch": bi + 1, "skus": len(skus), "method": method, **info})
-    info_df = pd.DataFrame(infos)
+            results = [_solve_batch(j) for j in jobs]
+        finally:
+            _SHARED.clear()
+    else:
+        # "spawn", not "fork": forking a process whose solver/OpenMP thread pools are already running
+        # can deadlock the children. Each worker receives the problem once via the initializer.
+        ctx = mp.get_context("spawn")
+        with ctx.Pool(workers, initializer=_init_worker, initargs=(prob, cfg)) as pool:
+            results = pool.map(_solve_batch, jobs, chunksize=1)
+    plans = [r[0] for r in results]
+    info_df = pd.DataFrame([r[1] for r in results])
     log.info(
-        "solved %d batch(es): %s",
+        "solved %d batch(es) on %d worker(s): %s",
         len(batches),
+        workers,
         ", ".join(f"{k}={v}" for k, v in info_df["status"].value_counts().items()),
     )
     return pd.concat(plans, ignore_index=True), info_df

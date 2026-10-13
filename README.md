@@ -15,7 +15,43 @@ rejects each move.
 
 ## Results
 
-{{RESULTS}}
+Base network: 25 branches, 300 SKUs, 4,889 branch × SKU series, three years of daily history.
+
+**Inventory position on the planning date** ($13.4M on hand):
+- 411 positions are likely to stock out before replenishment arrives.
+- $8.3M sits above target levels.
+- $3.7M is stagnant stock of SKUs the whole network cannot sell within a year. That is flagged for liquidation, because no transfer can fix it.
+
+**Forecast**, measured on a 28-day period no model saw during model selection:
+
+| Model | Daily WAPE | Bias | MASE |
+|---|---|---|---|
+| Selected per segment (mostly the global LightGBM) | **49.8%** | −0.8% | 0.72 |
+| Seasonal naive | 74.9% | +1.2% | 0.96 |
+
+- The selected models are 34% more accurate than seasonal naive, and better in every segment that has demand.
+- Over a full 28-day total, error falls to 12.9% (A items 12.0%).
+- No branch, category or ABC class is biased by more than 5%.
+- The P10–P90 band contains 84% of actuals, against an 80% target.
+
+**Transfers**: 883 recommended moves of 34.5k units.
+
+| Measure | Optimiser (MILP) | Greedy baseline |
+|---|---|---|
+| Net savings | **$203k** | $193k |
+| Transfer cost | $45k | $47k |
+| Expected lost-sales units avoided | 8,172 of 9,725 | 8,296 |
+| Excess inventory freed | $1.14M | $1.05M |
+| Annual carrying cost of excess | $2.18M → $1.92M | $2.18M → $1.93M |
+| Inventory turns | 8.4 → 8.9 | 8.4 → 8.9 |
+
+**Robustness:** re-solving with one assumption changed (service level 90/98%, transfer cost ×0.5/×2, forecast error σ ×0.75/×1.5, forecast level ±10%) keeps 66–92% of the same moves, and net savings stay between $171k and $235k.
+
+**Scale:** at 10x (250 branches, 3,000 SKUs, ~490k series) the pipeline completes on a 4-core, 15 GB machine.
+- Held-out WAPE is 50.8%.
+- The optimiser solves 163 parallel batches to optimality in 13 minutes, saving $42.8M vs $40.6M greedy.
+
+Timings are in [AUDIT.md](AUDIT.md).
 
 ## How it works
 
@@ -58,7 +94,7 @@ flowchart LR
 ```bash
 git clone https://github.com/bbbiyeba/stockflow && cd stockflow
 pip install -r requirements.txt          # Python 3.11+
-make run                                 # ~6 min: generate, clean, forecast, policy, optimise
+make run                                 # ~5 min: generate, clean, forecast, policy, optimise
 make app                                 # dashboard on http://localhost:8501
 ```
 
@@ -139,7 +175,12 @@ and enable sign-in before loading real numbers. See [SECURITY.md](SECURITY.md) a
 
 ## Quality
 
-{{QUALITY}}
+| Check | Result |
+|---|---|
+| Tests | 62 passing at 94% coverage: unit tests, a leakage guard, optimiser constraint checks, an end-to-end run on a tiny multi-bucket network, malformed-input rejection, and a render of every dashboard page |
+| Lint, format, types | ruff, black and mypy clean |
+| Security | bandit and pip-audit clean (0 issues, 0 known vulnerabilities) |
+| CI | GitHub Actions runs all of the above on every push |
 
 An audit of the first version (UI, security, scale, data-science correctness,
 reliability, production readiness) and everything it changed is in [AUDIT.md](AUDIT.md).
