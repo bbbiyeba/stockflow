@@ -444,7 +444,7 @@ Likely question: "Why is daily error still around fifty percent?" Answer: many i
         ("selected", "Selected per segment"),
     ]:
         r = m[key]
-        rows.append([lab, pct(r["wape"], 1), f"{r['mae']:.2f}", f"{r['bias'] * 100:+.1f}%"])
+        rows.append([lab, pct(r["wape"], 1), f"{r['mae']:.2f}", f"{round(r['bias'] * 100, 1) + 0.0:+.1f}%"])
     R = PP_ALIGN.RIGHT
     table(
         s,

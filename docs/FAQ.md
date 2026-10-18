@@ -14,18 +14,18 @@ No. Every number comes from a synthetic network of 25 branches and 300 SKUs, gen
 
 **Why is daily error about 50%?**
 - Many products sell a few units a day or less, so a single day is mostly noise.
-- Planning uses lead-time and 28-day totals, where the error is 12.9%.
+- Planning uses lead-time and 28-day totals, where the error is 12.8%.
 - Daily WAPE is shown anyway because it is the honest, standard measure.
 
 **Where do the savings come from, and can I trust the dollar amount?**
 - **Net savings** = the drop in total cost: freight, plus expected lost sales, plus the holding and obsolescence cost of excess left in place.
 - **Cost settings:** the price of a lost sale (0.6 × unit cost) and the holding rates are estimates in `config.yaml`. They need agreeing with finance before the dollar figures are trusted.
 - **Formulas:** the dashboard spells out every formula under "Before / after, and how these numbers are calculated".
-- **Robustness:** with any one assumption changed, net savings stay between $171k and $235k (`reports/sensitivity.csv`).
+- **Robustness:** with any one assumption changed, net savings stay between $182k and $248k (`reports/sensitivity.csv`).
 
-**Why does the optimiser leave more positions at risk than the greedy rule (72 vs 56)?**
+**Why does the optimiser leave more positions at risk than the greedy rule (76 vs 55)?**
 - It minimises total cost, so it skips fixes that cost more in freight than the lost sales they prevent.
-- It still saves more overall: $203k against $193k.
+- It still saves more overall: $216k against $206k.
 - If the business prefers to protect availability, raising `stockout_cost_multiplier` changes that trade-off.
 
 ## Running it

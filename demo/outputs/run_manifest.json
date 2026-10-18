@@ -1,52 +1,52 @@
 {
-  "run_id": "20261013T063006Z-c39fea",
-  "created_at": "2026-10-13T06:30:08.207421+00:00",
+  "run_id": "20261018T150118Z-51b1ba",
+  "created_at": "2026-10-18T15:01:20.558620+00:00",
   "stages": {
     "forecast": {
-      "seconds": 314.9,
+      "seconds": 314.3,
       "ok": true,
-      "finished_at": "2026-10-13T06:35:23.139682+00:00"
+      "finished_at": "2026-10-18T15:06:34.856777+00:00"
     },
     "policy": {
-      "seconds": 0.4,
+      "seconds": 0.5,
       "ok": true,
-      "finished_at": "2026-10-13T06:35:23.539141+00:00"
+      "finished_at": "2026-10-18T15:06:35.402952+00:00"
     },
     "optimize": {
-      "seconds": 14.7,
+      "seconds": 17.5,
       "ok": true,
-      "finished_at": "2026-10-13T06:35:38.244342+00:00"
+      "finished_at": "2026-10-18T15:06:52.949867+00:00"
     },
     "sensitivity": {
-      "seconds": 148.4,
+      "seconds": 178.2,
       "ok": true,
-      "finished_at": "2026-10-13T06:38:06.622272+00:00"
+      "finished_at": "2026-10-18T15:09:51.196221+00:00"
     }
   },
   "outputs": {
     "forecasts.csv": {
-      "sha256": "15a1b1d39b1a500ad03e6235627f9e4f020685b34739bb1e2054b24229b72b4b",
-      "bytes": 7193320
+      "sha256": "e54ca1457f1953d815f976fdb2315b0419500786fdd639642d242125dd819782",
+      "bytes": 7194673
     },
     "forecast_series_stats.parquet": {
-      "sha256": "a074212316e173c40f3a7cf5167efa357bf94aa81052236712b9aef7b6a71254",
-      "bytes": 270105
+      "sha256": "f6d705f3c7e57df13b9fcc7341420dff4aa41619d7f194fa35d842e3561b9c1d",
+      "bytes": 270224
     },
     "lightgbm_model.txt": {
       "sha256": "9970478c80b11f010053923e84385f5df3bed6e5ce8e7d6baa359f4e5fb58078",
       "bytes": 2830103
     },
     "inventory_policy.parquet": {
-      "sha256": "66e06fa795e32529483de4d2feb393f78b06945cca2045ec9f18fe59a3527a5a",
-      "bytes": 879128
+      "sha256": "889a9e17b869d18aad7c18eaa1e86d72b5efaf99ccba32db9b03aba6675a9046",
+      "bytes": 879250
     },
     "transfer_recommendations.csv": {
-      "sha256": "3b446aca8cf6e35eaf877e020c044ffad63f7f02019ca3519ec6fd1a227f15f6",
-      "bytes": 377781
+      "sha256": "6dd2f4ef0ae0fa6e978f7d8eda236068597d9beeda2b7f3d7d0796cda04c9a01",
+      "bytes": 383806
     },
     "transfer_recommendations.parquet": {
-      "sha256": "3ca0e3297a2e72edee5dcb7c560baea93c68a3087bd51ae96743444b47fd27de",
-      "bytes": 113039
+      "sha256": "64cc6283f35cb7ec62e7d91c1d6d6b2ae5e7e9f48238ee42d5cd8b9a5aad189c",
+      "bytes": 114283
     }
   },
   "config": {
@@ -116,6 +116,8 @@
         0.9
       ],
       "bias_flag_threshold": 0.05,
+      "bias_calibration": true,
+      "bias_calibration_prior_units": 1000,
       "cold_start_days": 56,
       "explain_steps": [
         0,
@@ -160,7 +162,7 @@
       "psi_limit": 0.25
     }
   },
-  "config_hash": "e1e4c1c0bb7160c5",
+  "config_hash": "cfeaf6dc8695c075",
   "seed": 42,
   "versions": {
     "python": "3.13.16",
@@ -174,5 +176,5 @@
     "scipy": "1.18.1",
     "pandera": "0.34.1"
   },
-  "git_commit": "9c37ff0748491ff68ad8d9136bb3ce4eeef23998"
+  "git_commit": "8678e7a416bbc6aee20212dacc48ff3a40ab3062"
 }

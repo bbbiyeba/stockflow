@@ -22,6 +22,7 @@ import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 import plotly.graph_objects as go  # noqa: E402
+from PIL import Image, ImageChops  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 ASSETS = Path(__file__).resolve().parent / "assets"
@@ -248,7 +249,6 @@ def _render_html(fig: go.Figure, name: str, width: int, height: int) -> None:
             page.goto(f"http://127.0.0.1:{srv.server_address[1]}/presentation/assets/_{name}.html")
             page.wait_for_timeout(2500)
             page.screenshot(path=str(ASSETS / f"{name}.png"))
-            from PIL import Image, ImageChops
 
             im = Image.open(ASSETS / f"{name}.png").convert("RGB")  # trim white margins
             bbox = ImageChops.difference(im, Image.new("RGB", im.size, "white")).getbbox()
@@ -366,6 +366,18 @@ def top_transfers(n: int = 5) -> list[dict]:
     ]
 
 
+# crop boxes (left, top, right, bottom) in docs/screenshots/transfers.png, taken at a 1366 x 1700 viewport
+DASH_TOP_BOX = (360, 60, 1300, 1066)  # headline, metrics and corridor map
+DASH_TABLE_BOX = (370, 1241, 880, 1576)  # first rows of the transfer table with Decide / Status / Reason
+
+
+def dashboard_crops() -> None:
+    """Crop the slide 7 images from the dashboard screenshot (retake it with the README's screenshot steps)."""
+    im = Image.open(ROOT / "docs/screenshots/transfers.png").convert("RGB")
+    im.crop(DASH_TOP_BOX).save(ASSETS / "dash_top.png")
+    im.crop(DASH_TABLE_BOX).save(ASSETS / "dash_table.png")
+
+
 def main() -> None:
     """Write facts.json and every chart image."""
     ASSETS.mkdir(parents=True, exist_ok=True)
@@ -375,6 +387,7 @@ def main() -> None:
     f["map"] = chart_map(f)
     chart_title_map()
     f["top_transfers"] = top_transfers()
+    dashboard_crops()
     (ASSETS / "facts.json").write_text(json.dumps(f, indent=2, default=str))
     print(json.dumps({k: v for k, v in f.items() if k not in ("top_transfers",)}, indent=1, default=str)[:3000])
 

@@ -1,11 +1,14 @@
 import numpy as np
 import pandas as pd
+import pytest
 
 from src.forecast import (
     _sample_plan,
     apply_intervals,
+    calibration_factors,
     cold_start_forecast,
     interval_params,
+    segment_factor,
     segment_quantiles,
     write_loss_report,
 )
@@ -97,3 +100,19 @@ def test_loss_report_flags_groups_and_series_where_selected_is_worse(tmp_path):
     assert out["best_simple_wape"] == 0.4 and bool(out["selected_loses_to_simple"])
     assert out["share_series_worse_than_naive"] == 0.5
     assert (tmp_path / "holdout_where_selected_loses.csv").exists()
+
+
+def test_calibration_factors_shrink_and_clip():
+    sums = pd.DataFrame(
+        {
+            "segment": ["A|smooth", "A|smooth", "C|lumpy", "B|erratic"],
+            "act": [10_000.0, 10_000.0, 10.0, 5_000.0],
+            "fc": [9_000.0, 9_000.0, 1.0, 50_000.0],
+        }
+    )
+    f = calibration_factors(sums, prior=1000)
+    assert f["A|smooth"] == pytest.approx(21_000 / 19_000)  # under-forecast segment is scaled up
+    assert f["C|lumpy"] == pytest.approx(1010 / 1001)  # thin segment shrunk almost to 1
+    assert f["B|erratic"] == 0.8  # clipped
+    assert calibration_factors(sums.iloc[0:0], prior=1000) == {}
+    assert segment_factor(f, np.array(["A|smooth", "new|seg"])).tolist() == [pytest.approx(21 / 19), 1.0]

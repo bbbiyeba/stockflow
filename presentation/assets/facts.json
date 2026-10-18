@@ -1,67 +1,67 @@
 {
-  "run_id": "20261013T063006Z-c39fea",
-  "git_commit": "9c37ff07",
+  "run_id": "20261018T150118Z-51b1ba",
+  "git_commit": "8678e7a4",
   "branches": 25,
   "skus": 300,
   "series": 4889,
   "on_hand_value": 13396527.14,
-  "excess_value": 8319757.482050058,
+  "excess_value": 8292295.668868198,
   "stagnant_value": 3711330.54,
   "liquidation_value": 3692136.8000000007,
   "liquidation_positions": 291,
-  "risk_positions": 411,
+  "risk_positions": 419,
   "stockout_day_rate": 0.057834997097976425,
   "health": {
     "excess": {
-      "positions": 2688,
-      "value": 7339578.8
+      "positions": 2683,
+      "value": 7307982.22
     },
     "healthy": {
-      "positions": 1433,
-      "value": 2166608.27
+      "positions": 1430,
+      "value": 2191179.38
     },
     "stagnant": {
       "positions": 357,
       "value": 3711330.54
     },
     "stockout_risk": {
-      "positions": 411,
-      "value": 179009.53
+      "positions": 419,
+      "value": 186035.0
     }
   },
-  "transfers": 883,
-  "units_moved": 34534.0,
-  "transfer_cost": 44784.46400000001,
-  "net_savings": 203124.04685772443,
-  "greedy_net_savings": 192721.07501794,
-  "excess_before": 8319757.482050058,
-  "excess_after": 7184731.797706295,
-  "excess_freed": 1135025.6843437632,
-  "carry_before": 2184834.103684452,
-  "carry_after": 1915052.9762159784,
-  "stockout_units_before": 9724.58068552569,
-  "stockout_units_after": 1552.0882197555702,
-  "stockout_units_avoided": 8172.49246577012,
-  "risk_after": 72,
-  "risk_after_greedy": 56,
-  "turns_before": 8.399200906592737,
-  "turns_after": 8.925741235821725,
+  "transfers": 895,
+  "units_moved": 35693.0,
+  "transfer_cost": 46440.366,
+  "net_savings": 216076.42391079664,
+  "greedy_net_savings": 205530.15646183584,
+  "excess_before": 8292295.668868198,
+  "excess_after": 7130433.136175317,
+  "excess_freed": 1161862.5326928822,
+  "carry_before": 2178051.80032718,
+  "carry_after": 1901669.8800064677,
+  "stockout_units_before": 10532.820786600898,
+  "stockout_units_after": 1584.911242915878,
+  "stockout_units_avoided": 8947.90954368502,
+  "risk_after": 76,
+  "risk_after_greedy": 55,
+  "turns_before": 8.466754040276157,
+  "turns_after": 9.007518426828351,
   "stagnant_before": 3711330.54,
   "stagnant_after": 3709799.37,
   "models": {
-    "lightgbm": {
-      "wape": 0.4973555227603235,
-      "mae": 2.241508690582495,
-      "bias": -0.0073849039233735,
-      "mase": 0.723068053127154,
-      "wape_28d_total": 0.1275957431107808
-    },
     "selected": {
-      "wape": 0.4980573789570399,
-      "mae": 2.244671853938453,
-      "bias": -0.0079531569300543,
-      "mase": 0.7169170659174817,
-      "wape_28d_total": 0.1288599653220155
+      "wape": 0.4984285504222287,
+      "mae": 2.246344669513717,
+      "bias": -0.0001956282637787,
+      "mase": 0.7229870722236325,
+      "wape_28d_total": 0.1283368956568573
+    },
+    "lightgbm": {
+      "wape": 0.4984368173081941,
+      "mae": 2.2463819271611896,
+      "bias": -0.0001871904215407,
+      "mase": 0.7229870722236325,
+      "wape_28d_total": 0.1283417673978785
     },
     "ses": {
       "wape": 0.5660677472768311,
@@ -99,27 +99,27 @@
       "wape_28d_total": 0.2802744349409059
     }
   },
-  "coverage": 0.8387311428951674,
-  "sens_overlap_min": 0.6562228528406787,
-  "sens_overlap_max": 0.9154166907974748,
-  "sens_savings_min": 170804.25567872217,
-  "sens_savings_max": 235382.1568576049,
-  "stockout_avoided_share": 0.8403953579134021,
-  "excess_share": 0.6210383777157084,
+  "coverage": 0.833838277084948,
+  "sens_overlap_min": 0.6680301459669963,
+  "sens_overlap_max": 0.9167063569887652,
+  "sens_savings_min": 182412.3486759004,
+  "sens_savings_max": 248111.2373563063,
+  "stockout_avoided_share": 0.8495264207920362,
+  "excess_share": 0.6189884573971906,
   "forecast_example": {
     "branch_id": "B24",
     "sku_id": "S0057",
     "category": "Tools",
-    "series_wape": 0.43308618664741516,
-    "a_class_median_wape": 0.43308618664741516,
+    "series_wape": 0.4330380856990814,
+    "a_class_median_wape": 0.4330380856990814,
     "start": "2026-09-03",
     "end": "2026-09-30",
     "series_coverage": 0.7857142857142857
   },
   "map": {
     "corridors_shown": 20,
-    "corridors_total": 265,
-    "share_units_shown": 0.4508310650373545
+    "corridors_total": 259,
+    "share_units_shown": 0.4505365197657804
   },
   "top_transfers": [
     {
@@ -127,55 +127,55 @@
       "to": "B17",
       "sku": "S0190",
       "category": "Electrical",
-      "units": 192,
-      "cost": 558.336,
-      "savings": 3956.8976555209965,
+      "units": 208,
+      "cost": 604.864,
+      "savings": 4317.705406839121,
       "reason": "excess->shortfall",
-      "reason_text": "B17 is short of S0190: on-hand covers 1 days of demand and stock-out risk is 100% before replenishment arrives. B10 holds 190 days of supply, above its target; moving 192 units costs $558 and avoids an estimated $3,957 in lost sales and carrying cost."
+      "reason_text": "B17 is short of S0190: on-hand covers 1 days of demand and stock-out risk is 100% before replenishment arrives. B10 holds 190 days of supply, above its target; moving 208 units costs $605 and avoids an estimated $4,318 in lost sales and carrying cost."
     },
     {
       "from": "B19",
       "to": "B23",
       "sku": "S0190",
       "category": "Electrical",
-      "units": 202,
-      "cost": 430.058,
-      "savings": 3899.120902246096,
+      "units": 215,
+      "cost": 457.735,
+      "savings": 4205.859674912566,
       "reason": "excess->shortfall",
-      "reason_text": "B23 is short of S0190: on-hand covers 0 days of demand and stock-out risk is 98% before replenishment arrives. B19 holds 64 days of supply, above its target; moving 202 units costs $430 and avoids an estimated $3,899 in lost sales and carrying cost."
+      "reason_text": "B23 is short of S0190: on-hand covers 0 days of demand and stock-out risk is 99% before replenishment arrives. B19 holds 63 days of supply, above its target; moving 215 units costs $458 and avoids an estimated $4,206 in lost sales and carrying cost."
     },
     {
       "from": "B14",
       "to": "B19",
       "sku": "S0285",
       "category": "Tools",
-      "units": 180,
-      "cost": 470.16,
-      "savings": 3231.1698965754313,
+      "units": 202,
+      "cost": 527.624,
+      "savings": 3781.02214505317,
       "reason": "excess->shortfall",
-      "reason_text": "B19 is short of S0285: on-hand covers 0 days of demand and stock-out risk is 100% before replenishment arrives. B14 holds 27 days of supply, above its target; moving 180 units costs $470 and avoids an estimated $3,231 in lost sales and carrying cost."
+      "reason_text": "B19 is short of S0285: on-hand covers 0 days of demand and stock-out risk is 100% before replenishment arrives. B14 holds 27 days of supply, above its target; moving 202 units costs $528 and avoids an estimated $3,781 in lost sales and carrying cost."
     },
     {
       "from": "B10",
       "to": "B07",
       "sku": "S0190",
       "category": "Electrical",
-      "units": 122,
-      "cost": 151.89000000000001,
-      "savings": 3049.613522759921,
+      "units": 132,
+      "cost": 164.34,
+      "savings": 3330.1752313109514,
       "reason": "excess->shortfall",
-      "reason_text": "B07 is short of S0190: on-hand covers 2 days of demand and stock-out risk is 100% before replenishment arrives. B10 holds 190 days of supply, above its target; moving 122 units costs $152 and avoids an estimated $3,050 in lost sales and carrying cost."
+      "reason_text": "B07 is short of S0190: on-hand covers 2 days of demand and stock-out risk is 100% before replenishment arrives. B10 holds 190 days of supply, above its target; moving 132 units costs $164 and avoids an estimated $3,330 in lost sales and carrying cost."
     },
     {
-      "from": "B16",
-      "to": "B17",
+      "from": "B19",
+      "to": "B09",
       "sku": "S0134",
       "category": "Tools",
-      "units": 185,
-      "cost": 154.66,
-      "savings": 3015.159562205239,
+      "units": 216,
+      "cost": 440.64,
+      "savings": 3249.2568014307344,
       "reason": "excess->shortfall",
-      "reason_text": "B17 is short of S0134: on-hand covers 0 days of demand and stock-out risk is 99% before replenishment arrives. B16 holds 36 days of supply, above its target; moving 185 units costs $155 and avoids an estimated $3,015 in lost sales and carrying cost."
+      "reason_text": "B09 is short of S0134: on-hand covers 0 days of demand and stock-out risk is 95% before replenishment arrives. B19 holds over a year of supply, above its target; moving 216 units costs $441 and avoids an estimated $3,249 in lost sales and carrying cost."
     }
   ]
 }

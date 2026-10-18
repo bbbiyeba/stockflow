@@ -64,6 +64,8 @@ forecast:
   selection_metric: wape         # metric used to pick the best model per segment
   quantiles: [0.1, 0.5, 0.9]     # forecast range written as p10 / p50 / p90
   bias_flag_threshold: 0.05      # |bias| above this is flagged in reports/bias_check.csv
+  bias_calibration: true         # scale LightGBM per segment by actual/forecast from earlier folds (D14)
+  bias_calibration_prior_units: 1000  # pseudo-units shrinking thin segments' factor toward 1
   cold_start_days: 56            # series with less history get the peer-based cold-start forecast
   explain_steps: [0, 7, 14, 21]  # horizon days averaged for SHAP explanations
   explain_max_series: 60000      # SHAP is costly: above this, explain A-class first, then a random sample

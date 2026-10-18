@@ -325,6 +325,24 @@ def _standardised(
 
 
 # --------------------------------------------------------------------------- run
+def calibration_factors(sums: pd.DataFrame, prior: float, lo: float = 0.8, hi: float = 1.25) -> dict[str, float]:
+    """Per-segment multiplicative bias correction from earlier folds: (actual + prior) / (forecast + prior).
+
+    ``sums`` has one row per series and fold with ``segment``, ``act`` and ``fc`` (scored days only).
+    ``prior`` pseudo-units shrink thin segments toward 1; the result is clipped to [lo, hi].
+    """
+    if sums.empty:
+        return {}
+    g = sums.groupby("segment")[["act", "fc"]].sum()
+    f = ((g["act"] + prior) / (g["fc"] + prior)).clip(lo, hi)
+    return {str(k): float(v) for k, v in f.items()}
+
+
+def segment_factor(factors: dict[str, float], segments: np.ndarray) -> np.ndarray:
+    """Factor per row for an array of segment labels (1.0 where a segment has no factor yet)."""
+    return np.array([factors.get(str(g), 1.0) for g in segments], dtype=np.float64)
+
+
 def write_loss_report(held: pd.DataFrame, rep: Path) -> pd.DataFrame:
     """Where the selected model loses to a simpler one on the held-out fold.
 
@@ -391,15 +409,32 @@ def run(config_path: str | None = None) -> None:
     # ---------------------------------------------------------------- backtest
     origins = [net.T - H * k for k in range(K, 0, -1)]
     rows = []
+    # LightGBM bias calibration: fold f is corrected with factors learned on folds < f only
+    calibrate, prior = bool(fc.get("bias_calibration", True)), float(fc.get("bias_calibration_prior_units", 1000))
+    cal_sums: list[pd.DataFrame] = []
+    cal_log = []
     for f, origin in enumerate(origins):
         t0 = time.time()
         booster = fit_lightgbm(net, cache, origin, cfg)
+        factors = calibration_factors(pd.concat(cal_sums, ignore_index=True), prior) if cal_sums else {}
+        cal_log += [{"fold": f + 1, "segment": g, "factor": v} for g, v in factors.items()]
+        fold_sums = []
         for k in net.buckets:
             b = get(k)
             preds, _ = forecast_bucket(net, b, origin, cfg, booster, MODELS)
             actual = np.where(b.valid[:, origin : origin + H], b.Y[:, origin : origin + H], np.nan).astype(np.float32)
             pattern = demand_pattern(b.Y[:, origin - 365 : origin])
             scale = mase_scale(b.Y[:, origin - 365 : origin], fc["seasonal_period"])
+            if calibrate and "lightgbm" in preds:
+                seg_k = np.char.add(np.char.add(abc_all[b.rows].astype("U1"), "|"), pattern.astype("U12"))
+                ok = ~np.isnan(actual)
+                raw = preds["lightgbm"]
+                fold_sums.append(
+                    pd.DataFrame(
+                        {"segment": seg_k, "act": np.where(ok, actual, 0).sum(1), "fc": np.where(ok, raw, 0).sum(1)}
+                    )
+                )
+                preds["lightgbm"] = (raw * segment_factor(factors, seg_k)[:, None]).astype(np.float32)
             np.savez(
                 bt_dir / f"fold{f}_bucket{k:03d}.npz",
                 actual=actual,
@@ -412,7 +447,15 @@ def run(config_path: str | None = None) -> None:
                 d["fold"], d["model"], d["series_idx"] = f + 1, m, b.rows
                 d["scale"], d["pattern"] = scale, pattern
                 rows.append(d)
+        cal_sums += fold_sums
         log.info("fold %d/%d (origin %s) done in %.0fs", f + 1, K, net.all_dates[origin].date(), time.time() - t0)
+    final_factors = calibration_factors(pd.concat(cal_sums, ignore_index=True), prior) if cal_sums else {}
+    cal_log += [{"fold": "final", "segment": g, "factor": v} for g, v in final_factors.items()]
+    pd.DataFrame(cal_log, columns=["fold", "segment", "factor"]).to_csv(
+        paths.reports / "bias_calibration.csv", index=False
+    )
+    if final_factors:
+        log.info("bias calibration factors: %s", {g: round(v, 3) for g, v in sorted(final_factors.items())})
     bt = pd.concat(rows, ignore_index=True)
     attrs = s[["branch_id", "sku_id", "abc_class", "category"]].assign(series_idx=np.arange(net.n))
     bt = bt.merge(attrs, on="series_idx")
@@ -583,6 +626,11 @@ def run(config_path: str | None = None) -> None:
         pat = demand_pattern(b.Y[:, origin - 365 : origin])
         seg = np.char.add(np.char.add(abc_all[b.rows].astype("U1"), "|"), pat.astype("U12"))
         final_pattern[b.rows] = pat
+        if calibrate and "lightgbm" in preds:
+            fac = segment_factor(final_factors, seg)
+            preds["lightgbm"] = (preds["lightgbm"] * fac[:, None]).astype(np.float32)
+            if contrib is not None:  # keep SHAP additive in log space: the factor moves the base value
+                contrib[:, -1] += np.log(fac)
         point[b.rows] = np.stack([preds[choice.get(g, "lightgbm")][i] for i, g in enumerate(seg)])
         if contrib is not None:
             contrib_all[b.rows] = contrib

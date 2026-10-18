@@ -5,7 +5,7 @@
 | | |
 |---|---|
 | **Task** | Daily unit demand for every branch × SKU, 28 days ahead, with a P10–P90 range |
-| **Model** | One global LightGBM model (Tweedie objective), forecasting recursively; simple models where they win on held-out data |
+| **Model** | One global LightGBM model (Tweedie objective), forecasting recursively, with a per-segment bias calibration learned on earlier backtest months; simple models where they win on held-out data |
 | **Output** | `outputs/forecasts/` (P10 / P50 / P90 per day), `outputs/forecast_series_stats.parquet` (28-day totals, error σ) |
 | **Consumers** | Safety stock and reorder points (`src/policy.py`), transfer optimiser (`src/optimizer.py`), dashboard |
 | **Owner** | Bryce Biyeba, Data Science Intern |
@@ -56,8 +56,8 @@ Evaluation is a rolling-origin backtest with 4 folds of 28 days each:
 
 | Model, held-out month | Daily WAPE | MAE (units/day) | Bias | MASE | 28-day-total WAPE |
 |---|---:|---:|---:|---:|---:|
-| **Selected per segment** | **49.8%** | **2.24** | **−0.8%** | 0.72 | 12.9% |
-| LightGBM alone | 49.7% | 2.24 | −0.7% | 0.72 | 12.8% |
+| **Selected per segment** (bias-calibrated LightGBM in every segment with demand) | **49.8%** | **2.25** | **0.0%** | 0.72 | 12.8% |
+| LightGBM before calibration (previous release) | 49.7% | 2.24 | −0.7% | 0.72 | 12.8% |
 | Exponential smoothing | 56.6% | 2.55 | +2.5% | 0.77 | 17.2% |
 | Croston (SBA) | 57.3% | 2.58 | +0.9% | 0.91 | 18.7% |
 | TSB | 57.6% | 2.60 | +4.6% | 0.81 | 19.4% |
@@ -66,13 +66,14 @@ Evaluation is a rolling-origin backtest with 4 folds of 28 days each:
 
 Source: `reports/holdout_metrics_overall.csv`.
 
-- **Against the baseline:** the selected models are 34% more accurate than seasonal naive overall, and better in every segment that has demand (`reports/holdout_selected_vs_naive_by_segment.csv`).
+- **Against the baseline:** the selected models are 33% more accurate than seasonal naive overall, and better in every segment that has demand (`reports/holdout_selected_vs_naive_by_segment.csv`).
 - **Where it does not win:**
   - No branch, category, ABC class or demand pattern is better served by a simple model; exponential smoothing is the closest overall, at 56.6%.
-  - Series by series, the selected model has more error than seasonal naive on 19% of series with demand: 4% of A items, 34% of C items and 38% of intermittent series.
+  - Series by series, the selected model has more error than seasonal naive on 19% of series with demand: 5% of A items, 32% of C items and 37% of intermittent series.
   - The detail is in `reports/holdout_where_selected_loses.csv` and on the dashboard's Forecast accuracy page.
-- **Bias:** no branch, category, ABC class or pattern is biased by more than 5% (`reports/bias_check.csv`).
-- **Ranges:** the P10–P90 range held 84% of held-out actuals against an 80% target (`reports/interval_coverage.csv`).
+- **Bias:** no branch, category, ABC class or pattern is biased by more than 3.8% (`reports/bias_check.csv`).
+- **Bias calibration:** each segment's LightGBM forecast is multiplied by actual ÷ forecast from earlier backtest months. Thin segments are shrunk toward 1 with 1,000 pseudo-units, and factors are capped at ±25%. Held-out factors use folds 1–3 only; the final forecast uses all four. This took held-out bias from −0.7% to 0.0%, and A-class lumpy series from −7.2% to −0.2%, with no change in WAPE. The factors are in `reports/bias_calibration.csv`, and the SHAP base value absorbs them, so explanations still add up.
+- **Ranges:** the P10–P90 range held 83% of held-out actuals against an 80% target (`reports/interval_coverage.csv`).
 - **At 10× scale** (250 branches, 3,000 SKUs): held-out WAPE is 50.8%, against 75.8% for seasonal naive. Bias is −2.6%, and 8 branches plus the Tools category are under-forecast by 5–9%; this is logged as D14 in [AUDIT.md](../AUDIT.md).
 
 ## Limitations and risks
@@ -80,11 +81,10 @@ Source: `reports/holdout_metrics_overall.csv`.
 | Limitation | Effect | Mitigation |
 |---|---|---|
 | Synthetic data only | Absolute accuracy will differ on real data | Shadow pilot on real extracts before any decision |
-| Daily demand for slow movers is mostly noise | Daily WAPE stays high; for C-class intermittent items it is above 100% | Plan on lead-time and 28-day totals (12.9% error), not single days |
-| A-class lumpy series are under-forecast by 7.2% (all folds) | Slightly low safety stock for these positions | Logged as deferred item D13 in [AUDIT.md](../AUDIT.md): extend the bias check to segments and correct per segment |
+| Daily demand for slow movers is mostly noise | Daily WAPE stays high; for C-class intermittent items it is above 100% | Plan on lead-time and 28-day totals (12.8% error), not single days |
 | Lost sales are excluded, not reconstructed | Demand at chronically short branches may be understated | Held-out bias is reported per branch (`reports/bias_check.csv`); live monitoring checks bias by ABC class |
 | Normal error model for safety stock | Crude for very slow movers | Error σ comes from weekly backtest blocks, which capture autocorrelation |
-| Ranges over-cover slightly (84% vs 80%) | Conservative | Per-segment scaling is logged as deferred item D7 in [AUDIT.md](../AUDIT.md) |
+| Ranges over-cover slightly (83% vs 80%) | Conservative | Per-segment scaling is logged as deferred item D7 in [AUDIT.md](../AUDIT.md) |
 | New branches and SKUs | No history | Cold-start forecasts borrow from peers (same SKU elsewhere, or the category median) |
 
 ## Monitoring and retraining

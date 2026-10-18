@@ -20,7 +20,7 @@ rejects each move.
 Base network: 25 branches, 300 SKUs, 4,889 branch × SKU series, three years of daily history.
 
 **Inventory position on the planning date** ($13.4M on hand):
-- 411 positions are likely to stock out before replenishment arrives.
+- 419 positions are likely to stock out before replenishment arrives.
 - $8.3M sits above target levels.
 - $3.7M is stagnant stock of SKUs the whole network cannot sell within a year. That is flagged for liquidation, because no transfer can fix it.
 
@@ -28,31 +28,32 @@ Base network: 25 branches, 300 SKUs, 4,889 branch × SKU series, three years of 
 
 | Model | Daily WAPE | Bias | MASE |
 |---|---|---|---|
-| Selected per segment (mostly the global LightGBM) | **49.8%** | −0.8% | 0.72 |
+| Selected per segment (the global LightGBM, bias-calibrated, in every segment with demand) | **49.8%** | 0.0% | 0.72 |
 | Seasonal naive | 74.9% | +1.2% | 0.96 |
 
-- The selected models are 34% more accurate than seasonal naive, and better in every segment that has demand. No branch, category, ABC class or demand pattern is better served by a simple model.
-- Series by series, the selected model still has more error than seasonal naive on 19% of series with demand: 4% of A items but 34% of C items, mostly intermittent slow movers (`reports/holdout_where_selected_loses.csv`).
-- Over a full 28-day total, error falls to 12.9% (A items 12.0%).
-- No branch, category or ABC class is biased by more than 5%.
-- The P10–P90 band contains 84% of actuals, against an 80% target.
+- The selected models are 33% more accurate than seasonal naive, and better in every segment that has demand. No branch, category, ABC class or demand pattern is better served by a simple model.
+- Series by series, the selected model still has more error than seasonal naive on 19% of series with demand: 5% of A items but 32% of C items, mostly intermittent slow movers (`reports/holdout_where_selected_loses.csv`).
+- Over a full 28-day total, error falls to 12.8% (A items 12.1%).
+- **Bias calibration:** each segment's LightGBM forecast is scaled by actual ÷ forecast from earlier backtest months only (`reports/bias_calibration.csv`). This took held-out bias from −0.8% to 0.0%, and A-class lumpy items from −7.2% to −0.2%, without changing WAPE.
+- No branch, category, ABC class or pattern is biased by more than 3.8%.
+- The P10–P90 band contains 83% of actuals, against an 80% target.
 
-**Transfers**: 883 recommended moves of 34.5k units.
+**Transfers**: 895 recommended moves of 35.7k units.
 
 | Measure | Optimiser (MILP) | Greedy baseline |
 |---|---|---|
-| Net savings | **$203k** | $193k |
-| Transfer cost | $45k | $47k |
-| Expected lost-sales units avoided | 8,172 of 9,725 | 8,296 |
-| Excess inventory freed | $1.14M | $1.05M |
-| Annual carrying cost of excess | $2.18M → $1.92M | $2.18M → $1.93M |
-| Inventory turns | 8.4 → 8.9 | 8.4 → 8.9 |
-| Fill rate over lead time (availability) | 93.9% → 99.0% | 93.9% → 99.1% |
-| Share of stock value that is not excess (utilisation) | 37.9% → 46.4% | 37.9% → 45.8% |
+| Net savings | **$216k** | $206k |
+| Transfer cost | $46k | $49k |
+| Expected lost-sales units avoided | 8,948 of 10,533 | 9,079 |
+| Excess inventory freed | $1.16M | $1.09M |
+| Annual carrying cost of excess | $2.18M → $1.90M | $2.18M → $1.92M |
+| Inventory turns | 8.5 → 9.0 | 8.5 → 9.0 |
+| Fill rate over lead time (availability) | 93.5% → 99.0% | 93.5% → 99.1% |
+| Share of stock value that is not excess (utilisation) | 38.1% → 46.8% | 38.1% → 46.2% |
 
 Network storage use stays at 58% (transfers move units, they do not add them) and no branch is above 90% of its capacity before or after. Every formula and assumption is listed on the dashboard under "Before / after, and how these numbers are calculated".
 
-**Robustness:** re-solving with one assumption changed (service level 90/98%, transfer cost ×0.5/×2, forecast error σ ×0.75/×1.5, forecast level ±10%) keeps 66–92% of the same moves, and net savings stay between $171k and $235k.
+**Robustness:** re-solving with one assumption changed (service level 90/98%, transfer cost ×0.5/×2, forecast error σ ×0.75/×1.5, forecast level ±10%) keeps 67–92% of the same moves, and net savings stay between $182k and $248k.
 
 **Scale:** at 10x (250 branches, 3,000 SKUs, ~490k series) the pipeline completes on a 4-core, 15 GB machine in 2.4 hours, with a peak of 10.2 GB memory.
 - Held-out WAPE is 50.8%.
@@ -185,7 +186,7 @@ presentation/          slide deck (.pptx, .pdf) and the scripts that build it fr
 - **Synthetic data.** Absolute numbers (savings, WAPE) describe this simulated network, not any real company. The value is in the method and its relative comparisons.
 - **Lost sales are not recovered.** Stock-out days are excluded from training rather than un-censored, so demand at chronically short branches may still be slightly understated.
 - **Normal error model** for safety stock and stock-out probability. It is reasonable for 28-day and lead-time totals, and crude for very slow movers.
-- **Prediction intervals over-cover** (about 84% of actuals inside P10–P90, against 80%). Conservative, and safety stock does not depend on them.
+- **Prediction intervals over-cover** (about 83% of actuals inside P10–P90, against 80%). Conservative, and safety stock does not depend on them.
 - **The optimiser plans one cycle.** It looks at today's positions and the next lead time and review period, not a multi-period schedule. Capacity is in units, not cube.
 - **Economics are configurable estimates:** stock-out cost = 0.6 × unit cost, plus holding and obsolescence rates. Agree them with finance before trusting dollar figures.
 - **Pruning trades a little optimality for scale:** each node keeps its 8 cheapest lanes, which costs 0.8% of savings at 1x.
@@ -204,7 +205,7 @@ and enable sign-in before loading real numbers. See [SECURITY.md](SECURITY.md) a
 
 | Check | Result |
 |---|---|
-| Tests | 64 passing at 94% coverage: unit tests, a leakage guard, optimiser constraint checks, an end-to-end run on a tiny multi-bucket network, malformed-input rejection, and a render of every dashboard page |
+| Tests | 65 passing at 94% coverage: unit tests, a leakage guard, optimiser constraint checks, an end-to-end run on a tiny multi-bucket network, malformed-input rejection, and a render of every dashboard page |
 | Lint, format, types | ruff, black and mypy clean |
 | Security | bandit and pip-audit clean (0 issues, 0 known vulnerabilities) |
 | CI | GitHub Actions runs all of the above on every push |
