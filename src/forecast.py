@@ -325,22 +325,40 @@ def _standardised(
 
 
 # --------------------------------------------------------------------------- run
-def calibration_factors(sums: pd.DataFrame, prior: float, lo: float = 0.8, hi: float = 1.25) -> dict[str, float]:
-    """Per-segment multiplicative bias correction from earlier folds: (actual + prior) / (forecast + prior).
+def calibration_factors(
+    sums: pd.DataFrame, prior: float, lo: float = 0.8, hi: float = 1.25
+) -> dict[str, dict[str, float]]:
+    """Bias correction learned from earlier folds, in two stages.
 
-    ``sums`` has one row per series and fold with ``segment``, ``act`` and ``fc`` (scored days only).
-    ``prior`` pseudo-units shrink thin segments toward 1; the result is clipped to [lo, hi].
+    ``sums`` has one row per series and fold with ``segment``, ``branch``, ``act`` and ``fc``
+    (scored days only). Stage 1 gives each segment (ABC class x pattern) the factor
+    (actual + prior) / (forecast + prior); stage 2 gives each branch the same ratio computed on the
+    segment-corrected forecast, catching branch effects a network-wide factor cannot. ``prior``
+    pseudo-units shrink thin groups toward 1, and every factor is clipped to [lo, hi].
     """
     if sums.empty:
-        return {}
-    g = sums.groupby("segment")[["act", "fc"]].sum()
-    f = ((g["act"] + prior) / (g["fc"] + prior)).clip(lo, hi)
-    return {str(k): float(v) for k, v in f.items()}
+        return {"segment": {}, "branch": {}}
+
+    def ratio(g: pd.DataFrame, fc_col: str) -> dict[str, float]:
+        f = ((g["act"] + prior) / (g[fc_col] + prior)).clip(lo, hi)
+        return {str(k): float(v) for k, v in f.items()}
+
+    seg = ratio(sums.groupby("segment")[["act", "fc"]].sum(), "fc")
+    adj = sums.assign(adj=sums["fc"] * sums["segment"].astype(str).map(seg).fillna(1.0))
+    return {"segment": seg, "branch": ratio(adj.groupby("branch")[["act", "adj"]].sum(), "adj")}
 
 
-def segment_factor(factors: dict[str, float], segments: np.ndarray) -> np.ndarray:
-    """Factor per row for an array of segment labels (1.0 where a segment has no factor yet)."""
-    return np.array([factors.get(str(g), 1.0) for g in segments], dtype=np.float64)
+def calibration_scale(
+    factors: dict[str, dict[str, float]],
+    segments: np.ndarray,
+    branches: np.ndarray,
+    lo: float = 0.8,
+    hi: float = 1.25,
+) -> np.ndarray:
+    """Combined factor per row (segment x branch, clipped to [lo, hi]; 1.0 where none is known yet)."""
+    seg = np.array([factors.get("segment", {}).get(str(g), 1.0) for g in segments], dtype=np.float64)
+    br = np.array([factors.get("branch", {}).get(str(b), 1.0) for b in branches], dtype=np.float64)
+    return np.clip(seg * br, lo, hi)
 
 
 def write_loss_report(held: pd.DataFrame, rep: Path) -> pd.DataFrame:
@@ -417,7 +435,9 @@ def run(config_path: str | None = None) -> None:
         t0 = time.time()
         booster = fit_lightgbm(net, cache, origin, cfg)
         factors = calibration_factors(pd.concat(cal_sums, ignore_index=True), prior) if cal_sums else {}
-        cal_log += [{"fold": f + 1, "segment": g, "factor": v} for g, v in factors.items()]
+        cal_log += [
+            {"fold": f + 1, "level": lvl, "key": key, "factor": v} for lvl, d in factors.items() for key, v in d.items()
+        ]
         fold_sums = []
         for k in net.buckets:
             b = get(k)
@@ -431,10 +451,16 @@ def run(config_path: str | None = None) -> None:
                 raw = preds["lightgbm"]
                 fold_sums.append(
                     pd.DataFrame(
-                        {"segment": seg_k, "act": np.where(ok, actual, 0).sum(1), "fc": np.where(ok, raw, 0).sum(1)}
+                        {
+                            "segment": seg_k,
+                            "branch": b.static["branch_id"].astype(str).to_numpy(),
+                            "act": np.where(ok, actual, 0).sum(1),
+                            "fc": np.where(ok, raw, 0).sum(1),
+                        }
                     )
                 )
-                preds["lightgbm"] = (raw * segment_factor(factors, seg_k)[:, None]).astype(np.float32)
+                fac = calibration_scale(factors, seg_k, b.static["branch_id"].astype(str).to_numpy())
+                preds["lightgbm"] = (raw * fac[:, None]).astype(np.float32)
             np.savez(
                 bt_dir / f"fold{f}_bucket{k:03d}.npz",
                 actual=actual,
@@ -450,12 +476,19 @@ def run(config_path: str | None = None) -> None:
         cal_sums += fold_sums
         log.info("fold %d/%d (origin %s) done in %.0fs", f + 1, K, net.all_dates[origin].date(), time.time() - t0)
     final_factors = calibration_factors(pd.concat(cal_sums, ignore_index=True), prior) if cal_sums else {}
-    cal_log += [{"fold": "final", "segment": g, "factor": v} for g, v in final_factors.items()]
-    pd.DataFrame(cal_log, columns=["fold", "segment", "factor"]).to_csv(
+    cal_log += [
+        {"fold": "final", "level": lvl, "key": key, "factor": v}
+        for lvl, d in final_factors.items()
+        for key, v in d.items()
+    ]
+    pd.DataFrame(cal_log, columns=["fold", "level", "key", "factor"]).to_csv(
         paths.reports / "bias_calibration.csv", index=False
     )
     if final_factors:
-        log.info("bias calibration factors: %s", {g: round(v, 3) for g, v in sorted(final_factors.items())})
+        log.info(
+            "bias calibration factors by segment: %s",
+            {g: round(v, 3) for g, v in sorted(final_factors.get("segment", {}).items())},
+        )
     bt = pd.concat(rows, ignore_index=True)
     attrs = s[["branch_id", "sku_id", "abc_class", "category"]].assign(series_idx=np.arange(net.n))
     bt = bt.merge(attrs, on="series_idx")
@@ -627,7 +660,7 @@ def run(config_path: str | None = None) -> None:
         seg = np.char.add(np.char.add(abc_all[b.rows].astype("U1"), "|"), pat.astype("U12"))
         final_pattern[b.rows] = pat
         if calibrate and "lightgbm" in preds:
-            fac = segment_factor(final_factors, seg)
+            fac = calibration_scale(final_factors, seg, b.static["branch_id"].astype(str).to_numpy())
             preds["lightgbm"] = (preds["lightgbm"] * fac[:, None]).astype(np.float32)
             if contrib is not None:  # keep SHAP additive in log space: the factor moves the base value
                 contrib[:, -1] += np.log(fac)
