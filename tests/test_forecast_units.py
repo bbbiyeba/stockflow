@@ -6,9 +6,9 @@ from src.forecast import (
     _sample_plan,
     apply_intervals,
     calibration_factors,
-    calibration_scale,
     cold_start_forecast,
     interval_params,
+    segment_factor,
     segment_quantiles,
     write_loss_report,
 )
@@ -102,25 +102,17 @@ def test_loss_report_flags_groups_and_series_where_selected_is_worse(tmp_path):
     assert (tmp_path / "holdout_where_selected_loses.csv").exists()
 
 
-def test_calibration_factors_segment_then_branch():
+def test_calibration_factors_shrink_and_clip():
     sums = pd.DataFrame(
         {
             "segment": ["A|smooth", "A|smooth", "C|lumpy", "B|erratic"],
-            "branch": ["B1", "B2", "B1", "B2"],
-            "act": [12_000.0, 9_000.0, 10.0, 5_000.0],
+            "act": [10_000.0, 10_000.0, 10.0, 5_000.0],
             "fc": [9_000.0, 9_000.0, 1.0, 50_000.0],
         }
     )
     f = calibration_factors(sums, prior=1000)
-    seg = f["segment"]
-    assert seg["A|smooth"] == pytest.approx(22_000 / 19_000)  # under-forecast segment is scaled up
-    assert seg["C|lumpy"] == pytest.approx(1010 / 1001)  # thin segment shrunk almost to 1
-    assert seg["B|erratic"] == 0.8  # clipped
-    # branch stage works on the segment-corrected forecast: B1 still runs low after it, B2 high
-    b1_adj = 9_000 * seg["A|smooth"] + 1 * seg["C|lumpy"]
-    assert f["branch"]["B1"] == pytest.approx((12_010 + 1000) / (b1_adj + 1000))
-    assert f["branch"]["B1"] > 1 > f["branch"]["B2"]
-    assert calibration_factors(sums.iloc[0:0], prior=1000) == {"segment": {}, "branch": {}}
-    scale = calibration_scale(f, np.array(["A|smooth", "new|seg"]), np.array(["B1", "B9"]))
-    assert scale[0] == pytest.approx(min(1.25, seg["A|smooth"] * f["branch"]["B1"]))
-    assert scale[1] == 1.0
+    assert f["A|smooth"] == pytest.approx(21_000 / 19_000)  # under-forecast segment is scaled up
+    assert f["C|lumpy"] == pytest.approx(1010 / 1001)  # thin segment shrunk almost to 1
+    assert f["B|erratic"] == 0.8  # clipped
+    assert calibration_factors(sums.iloc[0:0], prior=1000) == {}
+    assert segment_factor(f, np.array(["A|smooth", "new|seg"])).tolist() == [pytest.approx(21 / 19), 1.0]
