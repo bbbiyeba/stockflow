@@ -28,5 +28,5 @@ storage_utilisation_before,0.5799403159050225,0.5799403159050225
 storage_utilisation_after,0.5799403159050225,0.5799403159050225
 branches_above_90pct_capacity_before,0.0,0.0
 branches_above_90pct_capacity_after,0.0,0.0
-solve_seconds,17.0,0.0
+solve_seconds,16.6,0.0
 rows_with_non_positive_savings,0.0,

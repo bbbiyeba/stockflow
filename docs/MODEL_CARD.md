@@ -74,7 +74,9 @@ Source: `reports/holdout_metrics_overall.csv`.
 - **Bias:** no branch, category, ABC class or pattern is biased by more than 3.8% (`reports/bias_check.csv`).
 - **Bias calibration:** each segment's LightGBM forecast is multiplied by actual ÷ forecast from earlier backtest months. Thin segments are shrunk toward 1 with 1,000 pseudo-units, and factors are capped at ±25%. Held-out factors use folds 1–3 only; the final forecast uses all four. This took held-out bias from −0.7% to 0.0%, and A-class lumpy series from −7.2% to −0.2%, with no change in WAPE. The factors are in `reports/bias_calibration.csv`, and the SHAP base value absorbs them, so explanations still add up.
 - **Ranges:** the P10–P90 range held 83% of held-out actuals against an 80% target (`reports/interval_coverage.csv`).
-- **At 10× scale** (250 branches, 3,000 SKUs): held-out WAPE is 50.8%, against 75.8% for seasonal naive. Bias is −2.6%, and 8 branches plus the Tools category are under-forecast by 5–9%; this is logged as D14 in [AUDIT.md](../AUDIT.md).
+- **At 10× scale** (250 branches, 3,000 SKUs):
+  - Held-out WAPE is 51.1%, against 75.8% for seasonal naive, and bias is −0.8% (−2.6% before calibration).
+  - Two of the 68 branches large enough to judge are 5–7% low in the held-out month. They were on target in the earlier months, so this is month-to-month variation that history can't correct (AUDIT.md D14).
 
 ## Limitations and risks
 

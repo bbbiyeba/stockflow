@@ -1,26 +1,26 @@
 {
-  "run_id": "20261018T150118Z-51b1ba",
-  "created_at": "2026-10-18T15:01:20.558620+00:00",
+  "run_id": "20261018T174659Z-a56463",
+  "created_at": "2026-10-18T17:47:00.439359+00:00",
   "stages": {
     "forecast": {
-      "seconds": 314.3,
+      "seconds": 295.7,
       "ok": true,
-      "finished_at": "2026-10-18T15:06:34.856777+00:00"
+      "finished_at": "2026-10-18T17:51:56.171761+00:00"
     },
     "policy": {
       "seconds": 0.5,
       "ok": true,
-      "finished_at": "2026-10-18T15:06:35.402952+00:00"
+      "finished_at": "2026-10-18T17:51:56.625018+00:00"
     },
     "optimize": {
-      "seconds": 17.5,
+      "seconds": 16.9,
       "ok": true,
-      "finished_at": "2026-10-18T15:06:52.949867+00:00"
+      "finished_at": "2026-10-18T17:52:13.510732+00:00"
     },
     "sensitivity": {
-      "seconds": 178.2,
+      "seconds": 163.9,
       "ok": true,
-      "finished_at": "2026-10-18T15:09:51.196221+00:00"
+      "finished_at": "2026-10-18T17:54:57.412860+00:00"
     }
   },
   "outputs": {
@@ -41,12 +41,12 @@
       "bytes": 879250
     },
     "transfer_recommendations.csv": {
-      "sha256": "6dd2f4ef0ae0fa6e978f7d8eda236068597d9beeda2b7f3d7d0796cda04c9a01",
+      "sha256": "9695e2259e3c70b354f4f7d12dfdb22d22fede187174174fb7dc7ac9b47db488",
       "bytes": 383806
     },
     "transfer_recommendations.parquet": {
-      "sha256": "64cc6283f35cb7ec62e7d91c1d6d6b2ae5e7e9f48238ee42d5cd8b9a5aad189c",
-      "bytes": 114283
+      "sha256": "b61f3ebf4dfa3bc4c4019f90e9173155b9d0cf4e414accf099f1b14a3e9e6198",
+      "bytes": 114207
     }
   },
   "config": {
@@ -176,5 +176,5 @@
     "scipy": "1.18.1",
     "pandera": "0.34.1"
   },
-  "git_commit": "8678e7a416bbc6aee20212dacc48ff3a40ab3062"
+  "git_commit": "454056b092922117004d431a89c92742f05053c1"
 }

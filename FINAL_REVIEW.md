@@ -7,7 +7,7 @@
 - **Commits:**
   - Review fixes are in `4478beb`; review documents and the remaining fixes are in the commit that adds this file.
   - Evidence for the clean-run, Docker and CI checks comes from `4478beb`. That is the code under test: the later commit adds only documentation and two screenshots, no code.
-- **Date:** 2026-10-13.
+- **Date:** 2026-10-13. v1.0.1 (2026-10-18) fixed the forecast bias found here. Sections 1–7 keep the v1.0.0 evidence; the **v1.0.1 addendum** before "Open items" lists what changed, the new figures and how they were re-verified.
 - **Data:** all figures are from the synthetic network (25 branches, 300 SKUs, 4,889 branch × SKU series).
 
 **Result:** 47 checklist items: 46 PASS, 1 PARTIAL, 0 FAIL.
@@ -173,6 +173,62 @@ Not added, because each needs real data or a decision by the business:
 - SSO configured against the company identity provider.
 
 These are listed as limitations in the README, model card and slide 8.
+
+## v1.0.1 addendum: forecast bias fix (2026-10-18)
+
+### Cause
+
+Two checks ruled out the obvious suspects and located the problem in the model:
+
+| Check | Result |
+|---|---|
+| Training sample design (10x, 4 of 17 SKU buckets) | Current sampler: −1.8% bias. Every-series grouped sampler at the same row budget: −1.8%. Sampling is not the cause |
+| Simple models at 10x, held-out month | 0% to +3% bias, while LightGBM was −2.4% to −2.6% in folds 2–4. The data is not the cause; the global model under-fits ~490k series and errs low |
+
+### Fix
+
+- **Per-segment bias calibration** (`calibration_factors` in `src/forecast.py`):
+  - LightGBM is multiplied by actual ÷ forecast per ABC class × pattern, learned on earlier folds only.
+  - Thin segments are shrunk toward 1 with 1,000 pseudo-units, and factors are capped at ±25%.
+  - Residuals, intervals, selection, the final forecast and the SHAP base value all use the calibrated values.
+- **Per-branch stage, tried and removed:**
+  - At 10x it moved the two remaining branches by under a point (B031 −6.5% → −5.9%, B205 −5.4% → −5.5%).
+  - At 1x it raised the largest branch bias from 3.8% to 4.6%.
+  - Branch factors learned on earlier months don't predict the held-out month's branch bias (correlation −0.04), so the change was reverted in `7f28659`.
+
+### Results
+
+| | Before (v1.0.0) | After (v1.0.1) |
+|---|---|---|
+| 1x held-out bias | −0.8% | **0.0%** |
+| 1x A-class lumpy bias, all folds (D13) | −7.2% | **−0.2%** |
+| 1x daily WAPE / 28-day WAPE | 49.8% / 12.9% | 49.8% / 12.8% |
+| 1x largest group bias | 4.3% | 3.8% |
+| 1x P10–P90 coverage | 84% | 83% |
+| 10x held-out bias (D14) | −2.6% | **−0.8%** |
+| 10x groups over ±5% | 9 (8 branches + Tools) | 2 branches (B031 −6.5%, B205 −5.4%; not predictable from earlier months) |
+| 10x daily WAPE | 50.8% | 51.1% |
+
+**Knock-on 1x figures** (sections 1–7 quote v1.0.0):
+- **Positions at risk:** 411 → 419.
+- **Transfers:** 883 → 895, moving 35,693 units.
+- **Net savings:** $203k → $216k, against $206k for greedy.
+- **Lost units avoided:** 8,172 → 8,948 of 10,533.
+- **Fill rate:** 93.5% → 99.0%.
+- **Turns:** 8.5 → 9.0.
+- **Sensitivity range:** $182k–$248k, with 67–92% of the plan kept.
+- **Accuracy gain over the baseline:** 33% (was 34%). The README, dashboard, demo snapshot, model card, FAQ, demo script and slides all show the new figures.
+
+### Re-verified on the v1.0.1 code
+
+| Check | Evidence |
+|---|---|
+| Tests, lint, types, security | 65 tests pass at 94% coverage, including the new calibration test; black, ruff and mypy clean; bandit 0 issues |
+| Determinism | Two 1x runs of the final code give identical figures; only `run_id` and the commit hash differ |
+| 10x end to end | forecast 3,984 s, peak 10.2 GB; policy 35 s; optimize 907 s, 160 batches (159 optimal, 1 at its time limit with the best plan kept), 0 sanity-check violations, $44.8M vs $42.7M greedy. Generate and prep are unchanged by this release (472 s and 3,103 s, measured in v1.0.0) |
+| Dashboard | All 8 README screenshots (4 desktop, 4 phone) retaken from the new outputs with 0 exceptions on every page |
+| Slides | Rebuilt from the regenerated figures; 8 slides rendered and inspected. A "−0.0%" bias label was fixed, and the slide 7 dashboard crops are now produced by `presentation/make_charts.py` |
+| Hosted demo | Snapshot rebuilt; Vercel redeploys on push |
 
 ---
 
