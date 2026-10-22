@@ -24,9 +24,9 @@ The talk is told as one story: **a surgeon is waiting for a part that is sitting
 | 2. The villain | 2 | It isn't a shortage. We have *too much* stock and *too little* at once | Surprise |
 | 3. The quest | 3–4 | First I had to see the future: forecast demand at every branch. Then I hit a setback (the bias) and fixed it | Trust |
 | 4. The turn | 5–7 | With a forecast I trust, I can move stock *before* anyone runs out, and a manager stays in control | "This could work here" |
-| 5. The ending | 8 | The patient doesn't wait. Here is how we make that real: a 12-week pilot | "Let's do it" |
+| 5. The ending | 8–11 | The patient doesn't wait. Here is how we make that real: a 12-week pilot | "Let's do it" |
 
-**The thread to keep coming back to:** the waiting patient. Mention them at the start (slide 1), in the middle (slide 5), and in the last line (slide 8). That callback is what makes the talk feel like a story rather than a report.
+**The thread to keep coming back to:** the waiting patient. Mention them at the start (slide 1), in the middle (slide 5), and in the last line (slide 11). That callback is what makes the talk feel like a story rather than a report.
 
 **Connecting lines between slides** (say these word for word; they carry the flow):
 - 1 → 2: "So why does that happen?"
@@ -35,7 +35,10 @@ The talk is told as one story: **a surgeon is waiting for a part that is sitting
 - 4 → 5: "A forecast alone doesn't help the patient. Moving the stock does."
 - 5 → 6: "So what does that add up to?"
 - 6 → 7: "Numbers are one thing. Let me show you what a branch manager actually sees."
-- 7 → 8: "So where do we go from here?"
+- 7 → 8 (after the demo): "That's the result. Here's what was hard."
+- 8 → 9: "Those four taught me a few things."
+- 9 → 10: "And if I had more time and resources..."
+- 10 → 11: "So where do we go from here?"
 
 ## Slide scripts
 
@@ -101,7 +104,25 @@ The talk is told as one story: **a surgeon is waiting for a part that is sitting
 
 - **Action:** switch to the browser tab you opened beforehand.
 
-### Slide 8: The ending (1:00)
+### Slide 8: The challenges (1:30)
+
+> "Now that you've seen the result, I want to be honest about what was hard, because that's where I learned the most. First, the data lies on stock-out days: an empty shelf records zero sales, not zero demand. That was 5.8% of days, so I excluded them. Second, the forecast ran 2.6% low at 10× scale. My first theory was wrong, and I proved that before building anything; a per-segment correction brought it to −0.8%. Third, scale: every product can move between every pair of branches, so I pruned routes that can't pay off and solved in parallel batches, 160 of them in about 15 minutes. Fourth, and hardest, trust: planners won't act on numbers they can't check, so every move has a reason and a human approves it."
+
+- **Then:** "Those four taught me a few things."
+
+### Slide 9: What I learned (1:00)
+
+> "Four lessons I'll carry forward. Test the hypothesis before building the fix. Beat the simple baseline, and say where you don't: the model still loses on 19% of series, and showing that made the rest more credible. Explainability drives adoption more than accuracy. And delete work that doesn't earn its place: I removed a branch-level correction that only added noise."
+
+- **Then:** "And if I had more time and resources..."
+
+### Slide 10: With more time and resources (1:00)
+
+> "First, real data: real ERP extracts, and cost settings agreed with finance. Second, plan weeks ahead, optimizing transfers and purchase orders together instead of one cycle. Third, better uncertainty: use the model's own forecast ranges and real lead-time variability for safety stock. Fourth, close the loop: raise approved transfers in the ERP, retrain on a schedule, and learn from every planner rejection."
+
+- **Then:** "So where do we go from here?"
+
+### Slide 11: The ending (1:00)
 
 > "So, how do we make this real? I'd propose a 12-week pilot. In the first four weeks, we connect real data from two or three branches. For the next six weeks, it runs in shadow mode. Planners see every recommendation and approve or reject it, but nothing changes automatically. In the last two weeks, we compare against what really happened and decide.
 >
@@ -129,7 +150,7 @@ The talk is told as one story: **a surgeon is waiting for a part that is sitting
 | 1:30 | **Inventory health** | Point at the darkest heatmap cells | "This is where risk concentrates by branch and category. The $3.7M of stagnant stock is flagged for liquidation, not shuffled around." |
 | 1:55 | **Forecast explorer** (B01, top SKU) | Point at the band, the red stock-out days, then the drivers | "This is project one up close: history, the next 28 days with a range, stock-out days excluded because sales understate demand there, and the drivers in plain language." |
 | 2:25 | **Forecast accuracy** | Point at the headline, then **Where the model does not win** | "33% better than baseline, zero bias. It beats the best simple model in every branch, category and class. It still loses on 19% of individual series, mostly slow movers, and we show that rather than hide it." |
-| 2:50 | Back to the slides (slide 8) | — | "So that's the tool. Where do we go from here?" |
+| 2:50 | Back to the slides (slide 11) | — | "So that's the tool. Where do we go from here?" |
 
 **If something breaks:**
 - **Page is slow:** keep talking through the slide 7 screenshot.
@@ -154,5 +175,5 @@ The talk is told as one story: **a surgeon is waiting for a part that is sitting
 - [ ] Run the demo twice on the hosted site, including the "site is down" fallback.
 - [ ] Memorise the four numbers: **33%** better forecast, **$216k** net, **$1.2M** freed, **419 → 76** at risk.
 - [ ] Say "synthetic data" exactly once, on slide 1.
-- [ ] Hit the surgeon callback three times: slides 1, 5 and 8.
+- [ ] Hit the surgeon callback three times: slides 1, 5 and 11.
 - [ ] Practise the connecting lines until they come out without notes.

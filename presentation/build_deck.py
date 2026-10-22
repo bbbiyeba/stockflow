@@ -682,12 +682,142 @@ Likely question: "Can it execute transfers in the ERP?" Answer: deliberately not
     )
 
 
+def cards(s, items, top=BODY_TOP + Inches(0.05)):
+    """2x2 grid of cards: (heading, [body paragraphs], highlight) with a gold or charcoal bar."""
+    gap_x, gap_y = Inches(0.4), Inches(0.3)
+    cw = (CW - gap_x) // 2
+    ch = (FOOT_Y - Inches(0.35) - top - gap_y) // 2
+    for i, (head, body, hl) in enumerate(items):
+        x = ML + (i % 2) * (cw + gap_x)
+        y = top + (i // 2) * (ch + gap_y)
+        rect(s, x, y, cw, ch, LIGHTER)
+        rect(s, x, y, Inches(0.09), ch, GOLD if hl else CHARCOAL)
+        pad = Inches(0.3)
+        text(s, x + pad, y + Inches(0.2), cw - pad - Inches(0.25), Inches(0.5), head, size=19, bold=True, color=BLACK)
+        text(s, x + pad, y + Inches(0.8), cw - pad - Inches(0.25), ch - Inches(0.95), body, size=15, line_spacing=1.2)
+
+
+def s8_challenges(prs):
+    """Slide 8: the four hardest problems and how each was solved."""
+    s = frame(
+        prs,
+        "Four challenges shaped the design, and each one left the tool stronger",
+        8,
+        """
+Now that you've seen the result, I want to be honest about what was hard, because that's where most of the learning happened.
+
+First, the data lies on stock-out days. When the shelf is empty, sales are zero, but demand isn't. That happened on 5.8% of branch-product days. If I'd trained on those days, the model would learn that demand is lower than it really is, and keep ordering too little. So I flag those days and exclude them from training and scoring.
+
+Second, the forecast bias. At 10 times the network size, the forecast ran 2.6% low. My first theory, the way I sampled training data, was wrong, and I proved that with an experiment before building anything. The real fix was a per-segment correction learned only from earlier months. Bias went to -0.8%, and to zero at normal scale.
+
+Third, scale. Every product can move between every pair of branches, so the optimization grows very fast. I pruned routes that could never pay for themselves and split the problem into product batches that solve in parallel. At 10 times scale that's 160 batches in about 15 minutes.
+
+Fourth, and maybe the hardest: trust. A planner won't act on a list of numbers from a model. So every transfer carries a plain-language reason, nothing moves without approval, and the sensitivity check shows the plan holds when the assumptions change.
+""",
+    )
+    cards(
+        s,
+        [
+            (
+                "Stock-out days hide real demand",
+                [
+                    "Empty shelves on 5.8% of branch-product days record zero sales, not zero demand.",
+                    [("Fix: ", {"bold": True}), ("flagged and excluded those days from training and scoring.", {})],
+                ],
+                False,
+            ),
+            (
+                "The forecast ran 2.6% low at 10× scale",
+                [
+                    "My first theory was wrong; an experiment ruled it out before I built anything.",
+                    [("Fix: ", {"bold": True}), ("per-segment correction from past months only. Bias −2.6% → −0.8%.", {})],
+                ],
+                True,
+            ),
+            (
+                "The optimization grows fast with scale",
+                [
+                    "Every product can move between every pair of branches.",
+                    [("Fix: ", {"bold": True}), ("pruned routes that can't pay off; parallel product batches. 10×: 160 batches in ~15 min.", {})],
+                ],
+                False,
+            ),
+            (
+                "Planners need moves they can check",
+                [
+                    "Accuracy alone doesn't get a transfer approved.",
+                    [("Fix: ", {"bold": True}), ("a plain-language reason per move, human approval, and a sensitivity check.", {})],
+                ],
+                True,
+            ),
+        ],
+    )
+
+
+def s9_lessons(prs):
+    """Slide 9: what the project taught me."""
+    s = frame(
+        prs,
+        "What I learned: test the idea first, and trust is built by showing your work",
+        9,
+        """
+Four things I'll take into my next project.
+
+One: test the hypothesis before building the fix. With the bias, my first instinct was wrong. A quick experiment saved me from building a fix for the wrong problem.
+
+Two: the simple baseline is the bar to beat, and you should say where you lose. The model beats every baseline overall, but it still loses on 19% of individual series, mostly slow movers, and the dashboard shows that. Being upfront about it made the rest of the numbers more credible.
+
+Three: explainability drives adoption more than accuracy. The plain-language reason on each transfer will matter more to a branch manager than one more point of accuracy.
+
+Four: delete work that doesn't earn its place. I built a branch-level correction on top of the segment one. It didn't help at scale and added noise, so I took it out. Less code, same result.
+""",
+    )
+    cards(
+        s,
+        [
+            ("Test the hypothesis before the fix", ["My first theory for the bias was wrong. A quick experiment saved days of fixing the wrong thing."], True),
+            ("Beat the baseline; say where you don't", ["The model still loses on 19% of series, mostly slow movers. Showing it made the rest more credible."], False),
+            ("Explainability drives adoption", ["A reason a branch manager can check is worth more than one more point of accuracy."], False),
+            ("Delete work that doesn't earn its place", ["A branch-level correction added noise without helping, so I removed it."], True),
+        ],
+    )
+
+
+def s10_more_time(prs):
+    """Slide 10: what I'd do with more time and resources."""
+    s = frame(
+        prs,
+        "With more time and resources: real data, longer horizons, and closing the loop",
+        10,
+        """
+If I had more time and resources, four things come first.
+
+First, real data. Everything so far runs on synthetic data, so the first priority is real ERP extracts and agreeing the cost settings with finance, especially the cost of a lost sale.
+
+Second, plan further ahead. Today the tool plans one replenishment cycle. With more time I'd plan transfers and purchase orders together over several weeks, so the network isn't just moving stock around but deciding what to buy as well.
+
+Third, better uncertainty. Safety stock currently assumes forecast errors follow a normal distribution, and lead times are fixed. I'd use the model's own forecast ranges and real lead-time variability instead, which matters most for the slow, lumpy items.
+
+Fourth, close the loop. Approved transfers would be raised in the ERP automatically, retraining would run on a schedule, and every planner rejection would feed back into the cost settings, so the tool learns where its assumptions are wrong.
+""",
+    )
+    cards(
+        s,
+        [
+            ("Real data and agreed costs", ["Run on real ERP extracts, and agree the cost of a lost sale and freight rates with finance."], True),
+            ("Plan weeks ahead, not one cycle", ["Optimize transfers and purchase orders together over several weeks."], False),
+            ("Better uncertainty", ["Use the model's own forecast ranges and real lead-time variability for safety stock, not a normal error model."], False),
+            ("Close the loop", ["Raise approved transfers in the ERP, retrain on a schedule, and learn from planner rejections."], True),
+        ],
+    )
+
+
 def s8_next(prs):
-    """Slide 8: pilot plan, limitations and the mission."""
+    """Slide 11: pilot plan, limitations and the mission."""
     s = frame(
         prs,
         "Next: a 12-week pilot at 2–3 branches on real ERP and warehouse data",
-        8,
+        11,
         """
 To move from a demonstration to a decision, I'd propose a 12-week pilot.
 
@@ -751,7 +881,7 @@ def main() -> None:
     """Build the deck from assets/ and facts.json."""
     prs = Presentation()
     prs.slide_width, prs.slide_height = W, H
-    for fn in (s1_title, s2_problem, s3_approach, s4_forecast, s5_rebalance, s6_impact, s7_dashboard, s8_next):
+    for fn in (s1_title, s2_problem, s3_approach, s4_forecast, s5_rebalance, s6_impact, s7_dashboard, s8_challenges, s9_lessons, s10_more_time, s8_next):
         fn(prs)
     out = HERE / "Stockflow_Stryker.pptx"
     prs.save(out)
